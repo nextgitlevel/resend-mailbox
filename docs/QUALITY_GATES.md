@@ -17,7 +17,8 @@ not sufficient evidence.
 7. Obtain independent test-runner and quality-watcher results for application
    changes.
 8. Record evidence in `COMPLETED.md` and `OUTCOMES.md`.
-9. Create one scoped conventional commit.
+9. Create one scoped conventional commit and push it to the configured
+   upstream. Do not report the task complete until the push succeeds.
 
 ## Gate matrix
 
@@ -67,5 +68,6 @@ Before committing, the commit steward must verify:
 - `ACTIVE.md` is cleared or advanced, and outcomes are recorded.
 - The commit message follows Conventional Commits, for example
   `docs: establish project operating rules`.
+- `git push` completes successfully for the task branch.
 
 Never force-push, rewrite shared history, or commit generated secrets.

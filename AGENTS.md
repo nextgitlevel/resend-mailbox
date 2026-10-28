@@ -40,6 +40,8 @@ Every behavior change follows red → green → refactor:
    `OUTCOMES.md`.
 7. Commit only after every required gate passes and only include deliberate,
    task-scoped files in that commit.
+8. Push the successful task commit to its configured upstream before reporting
+   completion. A commit is not handed off as complete until the push succeeds.
 
 Never weaken, delete, skip, or rewrite a test merely to make a failing suite
 green without explicit user approval and documented rationale. A bug fix must
@@ -83,8 +85,9 @@ failing, or unrecorded.
 
 The authoritative gate list is `docs/QUALITY_GATES.md`. At minimum, a commit
 requires a clean targeted test result, relevant full-suite result, lint/type
-results, tracker updates, and `git diff --check`. Do not commit unrelated
-existing worktree changes. Use conventional commit messages.
+results, tracker updates, and `git diff --check`; it must then be pushed to
+the configured upstream. Do not commit unrelated existing worktree changes.
+Use conventional commit messages.
 
 ## Operational-change reporting
 

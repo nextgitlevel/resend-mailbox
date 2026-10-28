@@ -21,3 +21,13 @@ intended outcome. Each entry must include:
   not exist yet; Sprint 0 must add them before application work begins.
 - **Operational impact:** none. The checkout remains a VPS development
   workspace, not a runtime/deployment input.
+
+## 2026-10-28 — commit handoff rule
+
+- **Intended outcome:** prevent completed work from remaining only on the VPS
+  checkout by requiring every verified task commit to be pushed upstream.
+- **Proof:** `AGENTS.md` and `QUALITY_GATES.md` require a successful
+  `git push` before task handoff; the implementing commit and the prior
+  documentation-foundation commit are pushed to `origin/main` together.
+- **Operational impact:** repository history is synchronized to GitHub; no
+  runtime configuration changed.
