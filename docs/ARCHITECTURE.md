@@ -8,7 +8,9 @@ Property Intelligence runtime component.
 Development dependencies are defined in `compose.dev.yaml` and bind only to
 loopback addresses. Copy `.env.example` to an ignored `.env` and replace every
 `CHANGE_ME` value before starting the local services. That Compose file is not
-a production deployment artifact.
+a production deployment artifact. Its host ports deliberately use the
+`15432`, `16379`, and `19000–19001` range to avoid colliding with the VPS's
+existing services.
 Production will consume immutable release artifacts and separately managed
 configuration/secrets.
 

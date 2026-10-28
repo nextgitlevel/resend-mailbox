@@ -52,4 +52,8 @@ test("development compose is explicitly local-only and uses no application image
   assert.doesNotMatch(compose, /resend-mailbox-api|resend-mailbox-client/);
   assert.doesNotMatch(compose, /minio\/minio:latest/);
   assert.match(compose, /MINIO_ROOT_PASSWORD:\s*\$\{MINIO_ROOT_PASSWORD:\?/);
+  assert.match(compose, /127\.0\.0\.1:15432:5432/);
+  assert.match(compose, /127\.0\.0\.1:16379:6379/);
+  assert.doesNotMatch(compose, /127\.0\.0\.1:5432:5432/);
+  assert.doesNotMatch(compose, /127\.0\.0\.1:6379:6379/);
 });
