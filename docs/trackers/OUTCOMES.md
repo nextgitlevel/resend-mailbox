@@ -92,3 +92,28 @@ diff --check` passed; independent test and quality review passed.
   a superseding ADR rather than editing these decisions.
 - **Operational impact:** none. The standalone VPS development checkout
   remains outside all runtime and deployment paths.
+
+## 2026-10-28 — Sprint 1 identity persistence foundation
+
+- **Intended outcome:** establish the smallest real PostgreSQL foundation for
+  organization-scoped identity and encrypted provider-secret envelopes without
+  introducing plaintext secrets, a KMS configuration, or provider access.
+- **Proof:** the temporary Compose PostgreSQL service ran the two repository
+  integration cases successfully. They applied and reverted an isolated schema
+  per case, created redacted connection metadata, returned no cross-tenant
+  result, rejected duplicate membership, and rejected a cross-organization
+  secret envelope via the composite foreign key. API type and lint checks
+  passed.
+- **Authoritative application paths:** the reversible schema and repository
+  live at `apps/api/src/persistence/identity-repository.ts`; integration proof
+  lives at `apps/api/test/identity-repository.integration.test.ts`. Neither
+  path is a live runtime migration runner or production configuration.
+- **Limitations:** a production migration executor, authenticated Owner
+  bootstrap endpoint/session, actual encryption implementation/KMS, audit
+  records, and Resend validation are intentionally deferred. The stored
+  envelope is an already-encrypted opaque payload, not proof of encryption by
+  itself.
+- **Operational impact:** the temporary local Docker stack used only the
+  ephemeral Compose password and was removed with its named test volumes. No
+  staging/production service, persistent application database, secret, or
+  deployment artifact changed.

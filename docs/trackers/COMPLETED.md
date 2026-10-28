@@ -139,3 +139,44 @@ git diff --check
 **Result:** passed, including independent test-runner and quality-watcher
 review. No runtime configuration, credential, provider call, database, or
 deployment artifact was created.
+
+## 2026-10-28 — Sprint 1 identity persistence foundation
+
+**Outcome:** added a reversible PostgreSQL identity schema and an
+organization-scoped server repository for the first Owner, Resend connection
+metadata, and encrypted secret-envelope record.
+
+**Acceptance criteria met:**
+
+- The reversible schema creates global users, organizations, memberships,
+  Resend connections, and secret envelopes with role, uniqueness, and foreign
+  key constraints. A composite foreign key prevents an envelope from referring
+  to a connection in another organization.
+- `PostgresIdentityRepository.bootstrapOwner` writes Owner/user/organization/
+  membership/connection/envelope data in one transaction. Its read API returns
+  redacted connection metadata only; it has no plaintext secret field or read
+  operation.
+- PostgreSQL integration tests prove organization-scoped lookup isolation,
+  duplicate membership rejection, cross-organization envelope rejection, and
+  migration rollback for each generated test schema.
+
+**Test-first evidence:**
+
+- `corepack pnpm --filter @resend-mailbox/api test` first failed because the
+  `pg` driver and the persistence module did not exist.
+- The integration test then exposed two test-harness defects: a pooled-session
+  search-path assumption and a missing fixture ID. The harness now starts every
+  pool in a generated schema and the negative fixture reaches the composite
+  foreign-key constraint.
+
+**Verification:**
+
+```bash
+sudo env POSTGRES_PASSWORD=compose-probe-only docker compose -f compose.dev.yaml up -d --wait --wait-timeout 60
+DATABASE_URL='postgresql://resend_mailbox:compose-probe-only@127.0.0.1:15432/resend_mailbox' corepack pnpm --filter @resend-mailbox/api test
+corepack pnpm --filter @resend-mailbox/api typecheck
+corepack pnpm --filter @resend-mailbox/api lint
+```
+
+**Result:** passed. Test schemas and the temporary Compose stack/volumes were
+removed after validation. No application database is running or initialized.
