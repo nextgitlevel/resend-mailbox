@@ -31,3 +31,19 @@ intended outcome. Each entry must include:
   documentation-foundation commit are pushed to `origin/main` together.
 - **Operational impact:** repository history is synchronized to GitHub; no
   runtime configuration changed.
+
+## 2026-10-28 — Sprint 0 scaffold
+
+- **Intended outcome:** create an independently testable, credential-free
+  foundation for the standalone Resend Mailbox application.
+- **Proof:** `corepack pnpm verify` passed secret scanning, formatting, API /
+  Expo / contracts linting, type checks, four root tests, and two API health
+  route tests. `git diff --check` passed.
+- **Architecture:** Expo Router client, Fastify API, shared TypeScript
+  contracts, and development-only Postgres/Redis/MinIO Compose definition.
+- **Limitations:** Docker is absent on this VPS. `compose.dev.yaml` is pinned
+  and statically tested, but its services have not been started. No Resend
+  credential, webhook, database, runtime configuration, or deployment service
+  was created.
+- **Commit:** recorded with this Sprint 0 foundation after independent review
+  and successful push.

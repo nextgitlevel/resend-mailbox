@@ -32,3 +32,33 @@ test -f docs/adr/README.md
 
 **Result:** passed before commit. No runtime configuration, secrets, services,
 or deployment artifacts were changed.
+
+## 2026-10-28 — Sprint 0 scaffold
+
+**Outcome:** created a standalone TypeScript pnpm monorepo with an Expo Router
+client, a Fastify API health endpoint, shared contracts, local-only Compose
+definition, baseline CI, contributor/security documents, and repeatable
+quality scripts.
+
+**Test-first evidence:**
+
+- `node --test tests/foundation.test.mjs` initially failed for the absent
+  workspace manifest, required files, and Compose definition.
+- The initial full verification exposed a secret scanner that failed on
+  untracked files; `tests/scan-secrets.test.mjs` first reproduced that defect
+  and now prevents its return.
+- The quality review required API health coverage and Compose hardening;
+  `apps/api/test/health.test.ts` verifies successful and unsupported-method
+  responses, while foundation tests enforce a pinned MinIO image and no
+  committed MinIO password.
+
+**Verification:**
+
+```bash
+corepack pnpm verify
+git diff --check
+```
+
+**Result:** passed. Docker is not installed on this VPS, so Compose received
+static structural validation only; runtime startup remains the active Sprint 0
+environment prerequisite.

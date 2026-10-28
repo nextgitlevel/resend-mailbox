@@ -69,12 +69,12 @@ and error-path coverage where relevant.
 When collaboration tools are available, use these independent roles for any
 non-trivial implementation. A role may not approve its own work.
 
-| Role | Responsibility | May edit production code? |
-| --- | --- | --- |
-| Implementer | Owns the scoped implementation and its focused tests. | Yes |
-| Test runner | Runs prescribed focused and full verification; reports exact commands and raw result summary. | No |
-| Quality watcher | Reviews diff for security, test adequacy, types, lint, formatting, docs, migrations, and deployment risks. | No |
-| Commit steward | Confirms clean scope, tracker evidence, and passing gates; creates the task commit. | No, except tracker/commit metadata |
+| Role            | Responsibility                                                                                             | May edit production code?          |
+| --------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Implementer     | Owns the scoped implementation and its focused tests.                                                      | Yes                                |
+| Test runner     | Runs prescribed focused and full verification; reports exact commands and raw result summary.              | No                                 |
+| Quality watcher | Reviews diff for security, test adequacy, types, lint, formatting, docs, migrations, and deployment risks. | No                                 |
+| Commit steward  | Confirms clean scope, tracker evidence, and passing gates; creates the task commit.                        | No, except tracker/commit metadata |
 
 For small documentation-only changes, the implementer may also act as test
 runner. For application changes, keep test runner and quality watcher

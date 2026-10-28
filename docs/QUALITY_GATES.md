@@ -22,15 +22,15 @@ not sufficient evidence.
 
 ## Gate matrix
 
-| Change type | Required evidence |
-| --- | --- |
-| Documentation | Link/format validation, `git diff --check`, manual review |
-| UI/client | Failing behavior test, component/unit tests, type check, lint, accessibility review, responsive web/native check where affected |
-| API | Failing route/service tests, authz and validation tests, type/lint, integration test |
-| Database/migration | Failing persistence test, migration up/down or equivalent validation, tenant/org isolation test, rollback note |
-| Webhook/provider integration | Fixture-based signature, idempotency, retry, invalid-payload, and provider-error tests; never require live credentials in CI |
-| Security-sensitive change | Threat-model note, negative authorization tests, secret scan, independent quality review |
-| Deployment artifact | Reproducible build, artifact identity/version, configuration inventory, startup and health probes |
+| Change type                  | Required evidence                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Documentation                | Link/format validation, `git diff --check`, manual review                                                                       |
+| UI/client                    | Failing behavior test, component/unit tests, type check, lint, accessibility review, responsive web/native check where affected |
+| API                          | Failing route/service tests, authz and validation tests, type/lint, integration test                                            |
+| Database/migration           | Failing persistence test, migration up/down or equivalent validation, tenant/org isolation test, rollback note                  |
+| Webhook/provider integration | Fixture-based signature, idempotency, retry, invalid-payload, and provider-error tests; never require live credentials in CI    |
+| Security-sensitive change    | Threat-model note, negative authorization tests, secret scan, independent quality review                                        |
+| Deployment artifact          | Reproducible build, artifact identity/version, configuration inventory, startup and health probes                               |
 
 ## Minimum command set
 
