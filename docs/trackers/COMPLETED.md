@@ -101,3 +101,41 @@ curl --silent --show-error http://127.0.0.1:19000/
 
 **Result:** passed. The probe stack and its named test volumes were removed
 after validation; no application deployment or credential was created.
+
+## 2026-10-28 — Sprint 1 architecture decisions
+
+**Outcome:** accepted durable, provider-independent decisions for
+organization/domain isolation, inbound message processing, and encrypted
+provider settings before implementation begins.
+
+**Acceptance criteria met:**
+
+- ADR 0001 defines organization ownership, domain/address/mailbox boundaries,
+  membership grants, and organization-scoped data access.
+- ADR 0002 defines raw-body signature verification, transactional event
+  deduplication, asynchronous processing, explicit recipient policy, retry,
+  and quarantine behavior.
+- ADR 0003 defines server-only envelope encryption, versioned KEKs, rotation,
+  redacted settings APIs/audits, and the deferred production KMS boundary.
+- The architecture test requires the three ADRs and their essential security
+  boundaries, preventing accidental removal or dilution.
+
+**Test-first evidence:**
+
+- `node --test tests/foundation.test.mjs` first failed because the three ADR
+  paths were absent.
+- The strengthened ADR-content test then failed because ADR 0001 used the
+  overbroad phrase “mutable business record”; it passed after the decision was
+  corrected to distinguish organization-owned records from global identities.
+
+**Verification:**
+
+```bash
+node --test tests/foundation.test.mjs
+corepack pnpm verify
+git diff --check
+```
+
+**Result:** passed, including independent test-runner and quality-watcher
+review. No runtime configuration, credential, provider call, database, or
+deployment artifact was created.

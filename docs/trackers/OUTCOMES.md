@@ -73,3 +73,22 @@ intended outcome. Each entry must include:
 - **Follow-up:** Sprint 1 must decide the durable production object-storage
   provider and credential model; this local compatibility service is not a
   production selection.
+
+## 2026-10-28 — Sprint 1 architecture decisions
+
+- **Intended outcome:** establish the durable security boundaries needed for a
+  standalone, multi-domain, future multi-user email client before building
+  persistence or provider access.
+- **Proof:** ADRs 0001–0003 define organization/domain isolation, a raw-body
+  signature-first and idempotent inbound lifecycle, and server-only envelope
+  encryption with versioned-key rotation. `node --test
+tests/foundation.test.mjs` first failed for missing ADRs, then for an
+  overbroad tenant-isolation statement, and passed once the decisions and
+  required content assertions were complete. `corepack pnpm verify` and `git
+diff --check` passed; independent test and quality review passed.
+- **Limitations:** no authentication implementation, database migration,
+  Resend credential, webhook endpoint, production KMS provider, or deployment
+  configuration exists yet. ADRs are design commitments; later changes require
+  a superseding ADR rather than editing these decisions.
+- **Operational impact:** none. The standalone VPS development checkout
+  remains outside all runtime and deployment paths.

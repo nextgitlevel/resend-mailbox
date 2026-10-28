@@ -14,5 +14,6 @@ system.
 - [Outcome and proof log](docs/trackers/OUTCOMES.md)
 - [Architecture decision records](docs/adr/README.md)
 
-No application code exists yet. The first implementation task is Sprint 0:
-scaffold the monorepo and reproducible quality tooling.
+The Sprint 0 monorepo and local-development foundation are complete. Sprint 1
+architecture decisions are documented before persistence, authentication, or
+Resend integration begins.

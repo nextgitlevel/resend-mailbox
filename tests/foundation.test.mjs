@@ -15,12 +15,46 @@ const requiredFiles = [
   "SECURITY.md",
   "CODE_OF_CONDUCT.md",
   "docs/ARCHITECTURE.md",
+  "docs/adr/0001-tenant-and-domain-isolation.md",
+  "docs/adr/0002-inbound-message-lifecycle.md",
+  "docs/adr/0003-encrypted-account-settings.md",
 ];
 
-test("Sprint 0 publishes every required foundation file", () => {
+test("repository publishes every required foundation and architecture file", () => {
   for (const file of requiredFiles) {
     assert.equal(existsSync(resolve(root, file)), true, `missing ${file}`);
   }
+});
+
+test("Sprint 1 ADRs preserve the required security boundaries", () => {
+  const tenantIsolation = readFileSync(
+    resolve(root, "docs/adr/0001-tenant-and-domain-isolation.md"),
+    "utf8",
+  );
+  const inboundLifecycle = readFileSync(
+    resolve(root, "docs/adr/0002-inbound-message-lifecycle.md"),
+    "utf8",
+  );
+  const encryptedSettings = readFileSync(
+    resolve(root, "docs/adr/0003-encrypted-account-settings.md"),
+    "utf8",
+  );
+
+  assert.match(
+    tenantIsolation,
+    /organization is the top-level authorization boundary/i,
+  );
+  assert.match(
+    tenantIsolation,
+    /Every\s+organization-owned\s+record carries `organization_id`/,
+  );
+  assert.match(inboundLifecycle, /raw-body verification/i);
+  assert.match(inboundLifecycle, /verify signature against raw body/i);
+  assert.match(inboundLifecycle, /idempotent state machine/i);
+  assert.match(inboundLifecycle, /Replays are successful no-ops/i);
+  assert.match(encryptedSettings, /envelope encryption/i);
+  assert.match(encryptedSettings, /Rotation is dual-read/i);
+  assert.match(encryptedSettings, /never return the stored secret/i);
 });
 
 test("root workspace provides reproducible quality commands", () => {

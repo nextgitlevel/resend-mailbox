@@ -2,6 +2,16 @@
 
 ## Next task
 
-Start Sprint 1 architecture decisions. Write ADRs for the tenant/domain
-isolation model, inbound-message lifecycle, and encrypted account settings
-before implementing persistence, authentication, or a Resend integration.
+Implement the first Sprint 1 persistence slice: organization, global user,
+membership, and organization-owned Resend connection/secret-envelope models.
+Do not add a live Resend integration, a production key-management provider, or
+a deployment service.
+
+## Acceptance criteria
+
+- Pending definition of acceptance criteria and test-first proof for the
+  selected persistence implementation.
+
+## Test-first evidence
+
+- Pending.
