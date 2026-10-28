@@ -40,10 +40,36 @@ intended outcome. Each entry must include:
   Expo / contracts linting, type checks, four root tests, and two API health
   route tests. `git diff --check` passed.
 - **Architecture:** Expo Router client, Fastify API, shared TypeScript
-  contracts, and development-only Postgres/Redis/MinIO Compose definition.
-- **Limitations:** Docker is absent on this VPS. `compose.dev.yaml` is pinned
-  and statically tested, but its services have not been started. No Resend
+  contracts, and development-only Postgres/Redis/S3-compatible Compose
+  definition.
+- **Limitations:** No Resend
   credential, webhook, database, runtime configuration, or deployment service
   was created.
 - **Commit:** recorded with this Sprint 0 foundation after independent review
   and successful push.
+
+## 2026-10-28 — Docker development-runtime validation
+
+- **Intended outcome:** make the standalone workspace capable of isolated
+  development service startup while avoiding Property Intelligence ports and
+  runtime state.
+- **Proof:** Docker Engine `29.1.3` and Compose `2.40.3` were installed;
+  `docker compose ... config --quiet` passed. A temporary Compose stack
+  accepted PostgreSQL connections on `15432`, returned `PONG` from Redis on
+  `16379`, and returned a valid S3 bucket-list XML response from SeaweedFS on
+  `19000`. The Compose health check waits for the SeaweedFS S3 gateway to be
+  ready after its leader election. The foundation test first required the
+  complete SeaweedFS command, then passed after adding its filer process.
+- **Configuration authority:** the development service declaration is
+  `compose.dev.yaml` in this repository. Docker's package-managed systemd
+  unit is `docker.service`; Docker stores images and volumes beneath
+  `/var/lib/docker`. No mirrored Compose file exists, and no live service
+  reads this development Compose file after the probe stack is removed.
+- **Operational impact:** only package-managed Docker runtime state changed.
+  No production/staging application service, Property Intelligence service,
+  deployment artifact, or secret changed. The probe used an ephemeral
+  environment value and the containers plus their named probe volumes were
+  removed afterward.
+- **Follow-up:** Sprint 1 must decide the durable production object-storage
+  provider and credential model; this local compatibility service is not a
+  production selection.

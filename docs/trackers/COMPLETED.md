@@ -49,8 +49,8 @@ quality scripts.
   and now prevents its return.
 - The quality review required API health coverage and Compose hardening;
   `apps/api/test/health.test.ts` verifies successful and unsupported-method
-  responses, while foundation tests enforce a pinned MinIO image and no
-  committed MinIO password.
+  responses, while foundation tests enforce a pinned S3-compatible image and
+  no committed service password.
 
 **Verification:**
 
@@ -59,6 +59,45 @@ corepack pnpm verify
 git diff --check
 ```
 
-**Result:** passed. Docker is not installed on this VPS, so Compose received
-static structural validation only; runtime startup remains the active Sprint 0
-environment prerequisite.
+**Result:** passed. Docker runtime proof is recorded separately below.
+
+## 2026-10-28 — Docker development-runtime validation
+
+**Outcome:** installed Docker Engine and the Compose plugin, then proved the
+development-only Postgres, Redis, and S3-compatible services can start without
+touching a live application deployment.
+
+**Acceptance criteria met:**
+
+- Docker Engine `29.1.3` and Docker Compose `2.40.3` are installed and the
+  package-managed `docker.service` is active.
+- `compose.dev.yaml` passes Compose interpolation/configuration validation.
+- PostgreSQL accepted connections on `127.0.0.1:15432`, Redis returned `PONG`
+  on `127.0.0.1:16379`, and SeaweedFS returned the S3 bucket-list XML on
+  `127.0.0.1:19000` after its initial leader election.
+- The unavailable MinIO community image was replaced with the pinned,
+  S3-compatible `chrislusf/seaweedfs:3.91` image. Its command starts the
+  master, volume, filer, and S3 services.
+
+**Test-first evidence:**
+
+- `node --test tests/foundation.test.mjs` failed when the new health-check and
+  loopback-only S3 assertions were introduced, proving the original Compose
+  file neither encoded readiness nor protected the S3 host bind.
+- The smallest Compose change added the checked S3 health probe and explicit
+  loopback mapping; the focused test and the full verification suite then
+  passed.
+
+**Verification:**
+
+```bash
+node --test tests/foundation.test.mjs
+sudo env POSTGRES_PASSWORD=compose-probe-only docker compose -f compose.dev.yaml config --quiet
+sudo env POSTGRES_PASSWORD=compose-probe-only docker compose -f compose.dev.yaml up -d --force-recreate --wait --wait-timeout 60
+pg_isready -h 127.0.0.1 -p 15432 -U resend_mailbox -d resend_mailbox
+redis-cli -h 127.0.0.1 -p 16379 ping
+curl --silent --show-error http://127.0.0.1:19000/
+```
+
+**Result:** passed. The probe stack and its named test volumes were removed
+after validation; no application deployment or credential was created.
