@@ -14,3 +14,4 @@ acceptance; supersede them with a new ADR rather than rewriting history.
 - [0001 — Tenant and domain isolation](0001-tenant-and-domain-isolation.md)
 - [0002 — Inbound message lifecycle](0002-inbound-message-lifecycle.md)
 - [0003 — Encrypted account settings](0003-encrypted-account-settings.md)
+- [0004 — Owner authentication and sessions](0004-owner-authentication-and-sessions.md)

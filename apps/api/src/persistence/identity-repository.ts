@@ -58,6 +58,7 @@ const upStatements = [
     CREATE TABLE users (
       id UUID PRIMARY KEY,
       email TEXT NOT NULL UNIQUE CHECK (email = lower(email)),
+      password_hash TEXT CHECK (char_length(password_hash) > 0),
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `,
@@ -103,9 +104,29 @@ const upStatements = [
       UNIQUE (connection_id)
     )
   `,
+  `
+    CREATE TABLE sessions (
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE CHECK (char_length(token_hash) > 0),
+      expires_at TIMESTAMPTZ NOT NULL,
+      revoked_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `,
+  `
+    CREATE TABLE instance_bootstrap (
+      id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+      owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      owner_organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `,
 ] as const;
 
 const downStatements = [
+  "DROP TABLE IF EXISTS instance_bootstrap",
+  "DROP TABLE IF EXISTS sessions",
   "DROP TABLE IF EXISTS connection_secret_envelopes",
   "DROP TABLE IF EXISTS resend_connections",
   "DROP TABLE IF EXISTS organization_memberships",
@@ -188,6 +209,156 @@ export class PostgresIdentityRepository {
 
   public async addMembership(input: MembershipInput): Promise<void> {
     await this.insertMembership(this.pool, input);
+  }
+
+  public async hasOwner(): Promise<boolean> {
+    const result = await this.pool.query({
+      text: "SELECT 1 FROM instance_bootstrap LIMIT 1",
+    });
+
+    return result.rowCount !== 0;
+  }
+
+  public async bootstrapOwnerWithPassword(input: {
+    email: string;
+    organizationName: string;
+    passwordHash: string;
+  }): Promise<{ userId: string; organizationId: string; email: string }> {
+    const userId = randomUUID();
+    const organizationId = randomUUID();
+    const client = await this.pool.connect();
+
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(240_019_001)");
+      const existingOwner = await client.query({
+        text: "SELECT 1 FROM instance_bootstrap LIMIT 1",
+      });
+
+      if (existingOwner.rowCount !== 0) {
+        throw new Error("OWNER_ALREADY_BOOTSTRAPPED");
+      }
+
+      const email = normalizeEmail(input.email);
+      await client.query({
+        text: `
+          INSERT INTO users (id, email, password_hash)
+          VALUES ($1, $2, $3)
+        `,
+        values: [userId, email, input.passwordHash],
+      });
+      await client.query({
+        text: "INSERT INTO organizations (id, name) VALUES ($1, $2)",
+        values: [organizationId, input.organizationName],
+      });
+      await this.insertMembership(client, {
+        organizationId,
+        userId,
+        role: "owner",
+      });
+      await client.query({
+        text: `
+          INSERT INTO instance_bootstrap (
+            owner_user_id, owner_organization_id
+          ) VALUES ($1, $2)
+        `,
+        values: [userId, organizationId],
+      });
+      await client.query("COMMIT");
+
+      return { userId, organizationId, email };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  public async findUserForLogin(email: string): Promise<{
+    userId: string;
+    organizationId: string;
+    email: string;
+    passwordHash: string | null;
+  } | null> {
+    const result = await this.pool.query<{
+      user_id: string;
+      organization_id: string;
+      email: string;
+      password_hash: string | null;
+    }>({
+      text: `
+        SELECT app_user.id AS user_id, membership.organization_id, app_user.email,
+          app_user.password_hash
+        FROM users AS app_user
+        INNER JOIN organization_memberships AS membership
+          ON membership.user_id = app_user.id AND membership.role = 'owner'
+        WHERE app_user.email = $1
+      `,
+      values: [normalizeEmail(email)],
+    });
+    const row = result.rows[0];
+
+    return row
+      ? {
+          userId: row.user_id,
+          organizationId: row.organization_id,
+          email: row.email,
+          passwordHash: row.password_hash,
+        }
+      : null;
+  }
+
+  public async createSession(input: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<void> {
+    await this.pool.query({
+      text: `
+        INSERT INTO sessions (id, user_id, token_hash, expires_at)
+        VALUES ($1, $2, $3, $4)
+      `,
+      values: [randomUUID(), input.userId, input.tokenHash, input.expiresAt],
+    });
+  }
+
+  public async findSessionByTokenHash(tokenHash: string): Promise<{
+    userId: string;
+    organizationId: string;
+    email: string;
+    expiresAt: Date;
+    revokedAt: Date | null;
+  } | null> {
+    const result = await this.pool.query<{
+      user_id: string;
+      organization_id: string;
+      email: string;
+      expires_at: Date;
+      revoked_at: Date | null;
+    }>({
+      text: `
+        SELECT login_session.user_id, membership.organization_id, app_user.email,
+          login_session.expires_at, login_session.revoked_at
+        FROM sessions AS login_session
+        INNER JOIN users AS app_user ON app_user.id = login_session.user_id
+        INNER JOIN organization_memberships AS membership
+          ON membership.user_id = app_user.id AND membership.role = 'owner'
+        WHERE login_session.token_hash = $1
+      `,
+      values: [tokenHash],
+    });
+    const row = result.rows[0];
+
+    return row
+      ? {
+          userId: row.user_id,
+          organizationId: row.organization_id,
+          email: row.email,
+          expiresAt: row.expires_at,
+          revokedAt: row.revoked_at,
+        }
+      : null;
   }
 
   public async findConnectionForOrganization(

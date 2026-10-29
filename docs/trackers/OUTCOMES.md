@@ -117,3 +117,29 @@ diff --check` passed; independent test and quality review passed.
   ephemeral Compose password and was removed with its named test volumes. No
   staging/production service, persistent application database, secret, or
   deployment artifact changed.
+
+## 2026-10-29 — Sprint 1 Owner authentication and sessions
+
+- **Intended outcome:** let one self-hosted Owner establish and authenticate an
+  instance without a hosted identity dependency or exposure of passwords and
+  session tokens.
+- **Proof:** unit, route, and PostgreSQL integration tests passed. They prove
+  scrypt password hashing, hash-only session persistence, server-token-gated
+  one-time bootstrap, incorrect-password rejection, `HttpOnly`/`SameSite=Lax`
+  cookie delivery, expired/revoked/unknown session rejection, and
+  malformed-cookie rejection. ADR 0004 records the durable design and deferred
+  MFA/SSO/reset work.
+- **Authoritative application paths:** auth behavior is in
+  `apps/api/src/auth/auth-service.ts`; HTTP handling is
+  `apps/api/src/app.ts`; database records and schema are in
+  `apps/api/src/persistence/identity-repository.ts`; the server reads the
+  existing `DATABASE_URL` and new `BOOTSTRAP_TOKEN` runtime variables only to
+  enable this service. `.env.example` is the non-live template; no mirror or
+  live runtime configuration was created by this task.
+- **Limitations:** no migration runner, password reset, MFA, SSO, logout/
+  revocation endpoint, rate limiter, audit trail, or user-management UI exists
+  yet. The API is not deployed and responds `AUTH_NOT_CONFIGURED` if no
+  database is supplied.
+- **Operational impact:** the proof-only Compose stack was removed. No live
+  service reads the changed application code, and no persistent credential,
+  deployment artifact, or Property Intelligence component changed.

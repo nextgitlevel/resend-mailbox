@@ -18,6 +18,7 @@ const requiredFiles = [
   "docs/adr/0001-tenant-and-domain-isolation.md",
   "docs/adr/0002-inbound-message-lifecycle.md",
   "docs/adr/0003-encrypted-account-settings.md",
+  "docs/adr/0004-owner-authentication-and-sessions.md",
 ];
 
 test("repository publishes every required foundation and architecture file", () => {

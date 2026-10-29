@@ -14,6 +14,6 @@ system.
 - [Outcome and proof log](docs/trackers/OUTCOMES.md)
 - [Architecture decision records](docs/adr/README.md)
 
-The Sprint 0 monorepo and local-development foundation are complete. Sprint 1
-architecture decisions are documented before persistence, authentication, or
-Resend integration begins.
+The Sprint 0 foundation plus Sprint 1 architecture, identity persistence, and
+Owner-session foundation are complete. Resend provider integration has not yet
+begun.

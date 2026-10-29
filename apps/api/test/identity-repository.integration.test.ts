@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { Pool } from "pg";
 
+import { AuthService } from "../src/auth/auth-service.js";
 import {
   applyIdentitySchema,
   PostgresIdentityRepository,
@@ -36,7 +37,14 @@ const createIsolatedSchema = async () => {
     max: 1,
     options: `-c search_path=${schema}`,
   });
-  await applyIdentitySchema(pool);
+  try {
+    await applyIdentitySchema(pool);
+  } catch (error) {
+    await pool.end();
+    await adminPool.query(`DROP SCHEMA ${schema} CASCADE`);
+    await adminPool.end();
+    throw error;
+  }
 
   return {
     schema,
@@ -89,6 +97,52 @@ integrationTest(
     assert.equal(foreignConnection, null);
     assert.equal(JSON.stringify(ownConnection).includes("ciphertext"), false);
     assert.equal(JSON.stringify(ownConnection).includes("wrappedDek"), false);
+  },
+);
+
+integrationTest(
+  "Owner bootstrap stores a password hash and authenticates only a hashed session token",
+  async (t) => {
+    const { pool, cleanup } = await createIsolatedSchema();
+    const repository = new PostgresIdentityRepository(pool);
+    const service = new AuthService(repository, {
+      now: () => new Date("2026-10-29T00:00:00.000Z"),
+      randomToken: () => "auth-session-token-for-postgres-test-only",
+      bootstrapToken: "test-bootstrap-token",
+    });
+
+    t.after(cleanup);
+
+    const result = await service.bootstrapOwner({
+      email: "owner@example.test",
+      organizationName: "NextLevel",
+      password: "a long test-only password",
+      bootstrapToken: "test-bootstrap-token",
+    });
+    const storedUser = await repository.findUserForLogin("owner@example.test");
+
+    assert.equal(await repository.hasOwner(), true);
+    assert.notEqual(storedUser?.passwordHash, "a long test-only password");
+    assert.deepEqual(
+      await service.authenticateSession(result.sessionToken),
+      result.account,
+    );
+    assert.equal(
+      await service.authenticateSession(
+        "unknown_session_token_that_is_long_enough_123",
+      ),
+      null,
+    );
+    assert.equal(await service.authenticateSession("malformed"), null);
+    await assert.rejects(
+      service.bootstrapOwner({
+        email: "second@example.test",
+        organizationName: "Second",
+        password: "another long test-only password",
+        bootstrapToken: "test-bootstrap-token",
+      }),
+      /OWNER_ALREADY_BOOTSTRAPPED/,
+    );
   },
 );
 

@@ -180,3 +180,45 @@ corepack pnpm --filter @resend-mailbox/api lint
 
 **Result:** passed. Test schemas and the temporary Compose stack/volumes were
 removed after validation. No application database is running or initialized.
+
+## 2026-10-29 — Sprint 1 Owner authentication and sessions
+
+**Outcome:** implemented a one-time local Owner bootstrap, scrypt password
+hashing, opaque database-backed sessions, and authenticated API session routes.
+
+**Acceptance criteria met:**
+
+- Owner bootstrap requires a server-side `BOOTSTRAP_TOKEN` and is single-use
+  through a transaction lock and an `instance_bootstrap` singleton, without
+  making owner memberships globally unique across future organizations.
+- Passwords are stored only as versioned scrypt hashes; sessions persist only
+  SHA-256 token hashes and expiry/revocation metadata.
+- `/v1/bootstrap`, `/v1/login`, and `/v1/session` use server-only auth. The
+  cookie is `HttpOnly`/`SameSite=Lax`, becomes `Secure` in production, and the
+  raw token is never returned in JSON.
+- Missing, malformed, invalidly encoded, unknown, expired, revoked,
+  wrong-password, and unauthorized-bootstrap cases fail safely. Auth routes
+  report unavailable until a database is wired.
+
+**Test-first evidence:**
+
+- The focused service test initially failed because `auth-service` did not
+  exist; route tests then failed with `404` before the auth routes existed.
+- A malformed percent-encoded cookie first produced `500`; its regression test
+  now verifies `401`.
+- PostgreSQL integration first exposed a migration-order error, then a
+  globally unique owner-role conflict. The final singleton bootstrap table
+  preserves the one-instance invariant without blocking future organizations.
+
+**Verification:**
+
+```bash
+sudo env POSTGRES_PASSWORD=compose-probe-only docker compose -f compose.dev.yaml up -d --wait --wait-timeout 60
+DATABASE_URL='postgresql://resend_mailbox:compose-probe-only@127.0.0.1:15432/resend_mailbox' corepack pnpm --filter @resend-mailbox/api test
+corepack pnpm --filter @resend-mailbox/api typecheck
+corepack pnpm --filter @resend-mailbox/api lint
+```
+
+**Result:** passed. The temporary Compose stack, generated schemas, and named
+test volumes were removed after proof. No account, secret, live email, or
+deployment service was created.
