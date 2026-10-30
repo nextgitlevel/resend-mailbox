@@ -3,6 +3,42 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-30 — deterministic Resend connection-validation contract
+
+**Outcome:** added an injectable, server-side validation contract with
+network-free fixtures, while deliberately deferring live provider access and
+connection-status persistence.
+
+**Acceptance criteria met:**
+
+- The only public validation results are `connected`, `invalid_credentials`,
+  and `unavailable`; callers receive a status, never the credential.
+- Deterministic fixtures cover a successful probe, unauthorized response, and
+  transient provider failure. Unknown provider statuses fail closed to
+  `unavailable`, while an unmapped fixture credential is unauthorized.
+- This slice adds no API route, credential decryption, database status write,
+  logging, live Resend SDK, or network implementation.
+
+**Test-first evidence:**
+
+- `node --import tsx --test test/resend-validation-client.test.ts` initially
+  failed because `DeterministicResendValidationClient` was absent from the
+  contract module.
+- The same focused command then passed (3 tests), including a global `fetch`
+  guard that proves the fixture path performs no network request.
+
+**Verification:**
+
+```bash
+node --import tsx --test test/resend-validation-client.test.ts
+corepack pnpm verify
+git diff --check
+```
+
+**Result:** passed. Independent test-runner and quality-watcher review passed
+after the final formatting and tracker updates. No runtime configuration,
+secret, provider call, database write, or deployment artifact changed.
+
 ## 2026-10-28 — repository operating foundation
 
 **Outcome:** established automatic Codex guidance, a durable product plan,

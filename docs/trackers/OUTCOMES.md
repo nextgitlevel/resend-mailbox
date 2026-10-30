@@ -167,3 +167,27 @@ diff --check` passed; independent test and quality review passed.
 - **Operational impact:** no runtime configuration, secret, systemd unit,
   certificate, deployment artifact, or external provider state changed. The
   disposable Compose stack and volumes were removed after proof.
+
+## 2026-10-30 — deterministic Resend validation-client fixtures
+
+- **Intended outcome:** establish the first narrow validation seam without
+  accepting live credentials, initiating provider requests, or changing
+  stored connection state.
+- **Proof:** the focused API test first failed for the absent deterministic
+  client export, then passed all three tests after implementation. It covers
+  successful, unauthorized, transient, unexpected-status, and unmapped-
+  credential outcomes and installs a throwing `fetch` guard. `corepack pnpm
+  verify` passed the secret scan, formatting, linting, type checks, root tests,
+  and 19 API tests (four existing database integrations skipped without
+  `DATABASE_URL`); `git diff --check` passed.
+- **Authoritative application paths:** the contract and fixture-only transport
+  are `apps/api/src/settings/resend-validation-client.ts`; their tests are
+  `apps/api/test/resend-validation-client.test.ts`. Neither is runtime
+  configuration, and no live service reads either path because this application
+  has not been deployed. There are no mirrored copies.
+- **Limitations:** live Resend transport integration, controlled secret
+  decryption, connection-status persistence, API exposure, retries, and audit
+  records remain intentionally deferred to independently reviewed slices.
+- **Operational impact:** no runtime configuration, secret, systemd unit,
+  certificate, deployment artifact, database, or external provider state
+  changed.
