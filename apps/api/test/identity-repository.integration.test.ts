@@ -150,6 +150,14 @@ integrationTest(
       organizationId: second.organizationId,
       connectionId: first.connectionId,
     });
+    const ownEnvelope = await repository.findSecretEnvelopeForOrganization({
+      organizationId: first.organizationId,
+      connectionId: first.connectionId,
+    });
+    const foreignEnvelope = await repository.findSecretEnvelopeForOrganization({
+      organizationId: second.organizationId,
+      connectionId: first.connectionId,
+    });
 
     assert.deepEqual(ownConnection, {
       id: first.connectionId,
@@ -161,6 +169,8 @@ integrationTest(
     assert.equal(foreignConnection, null);
     assert.equal(JSON.stringify(ownConnection).includes("ciphertext"), false);
     assert.equal(JSON.stringify(ownConnection).includes("wrappedDek"), false);
+    assert.deepEqual(ownEnvelope, encryptedEnvelope);
+    assert.equal(foreignEnvelope, null);
   },
 );
 

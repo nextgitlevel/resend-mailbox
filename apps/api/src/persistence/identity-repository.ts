@@ -457,6 +457,40 @@ export class PostgresIdentityRepository {
     };
   }
 
+  public async findSecretEnvelopeForOrganization(
+    input: ConnectionLookupInput,
+  ): Promise<EncryptedSecretEnvelope | null> {
+    const result = await this.pool.query<{
+      ciphertext: string;
+      nonce: string;
+      wrapped_dek: string;
+      key_version: string;
+      algorithm: string;
+    }>({
+      text: `
+        SELECT envelope.ciphertext, envelope.nonce, envelope.wrapped_dek,
+          envelope.key_version, envelope.algorithm
+        FROM connection_secret_envelopes AS envelope
+        INNER JOIN resend_connections AS connection
+          ON connection.id = envelope.connection_id
+          AND connection.organization_id = envelope.organization_id
+        WHERE envelope.organization_id = $1 AND envelope.connection_id = $2
+      `,
+      values: [input.organizationId, input.connectionId],
+    });
+    const row = result.rows[0];
+
+    return row
+      ? {
+          ciphertext: row.ciphertext,
+          nonce: row.nonce,
+          wrappedDek: row.wrapped_dek,
+          keyVersion: row.key_version,
+          algorithm: row.algorithm,
+        }
+      : null;
+  }
+
   private async insertMembership(
     database: Queryable,
     input: MembershipInput,

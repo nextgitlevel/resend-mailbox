@@ -177,7 +177,7 @@ diff --check` passed; independent test and quality review passed.
   client export, then passed all three tests after implementation. It covers
   successful, unauthorized, transient, unexpected-status, and unmapped-
   credential outcomes and installs a throwing `fetch` guard. `corepack pnpm
-  verify` passed the secret scan, formatting, linting, type checks, root tests,
+verify` passed the secret scan, formatting, linting, type checks, root tests,
   and 19 API tests (four existing database integrations skipped without
   `DATABASE_URL`); `git diff --check` passed.
 - **Authoritative application paths:** the contract and fixture-only transport
@@ -191,3 +191,30 @@ diff --check` passed; independent test and quality review passed.
 - **Operational impact:** no runtime configuration, secret, systemd unit,
   certificate, deployment artifact, database, or external provider state
   changed.
+
+## 2026-10-30 — Owner-only on-demand connection validation
+
+- **Intended outcome:** make an authenticated Owner able to request a
+  redacted, ephemeral validation status for an existing connection without
+  exposing its credential or permitting cross-organization envelope access.
+- **Proof:** focused service and route tests passed six cases for authorized
+  success, unauthorized/transient outcomes, decryption failure, unauthenticated
+  access, non-Owner access with zero envelope lookups, and indistinguishable
+  missing/foreign `404` responses. The disposable PostgreSQL test run passed
+  all 25 API tests and proves the raw envelope query is organization scoped.
+  `corepack pnpm verify` and `git diff --check` passed.
+- **Authoritative application paths:** the endpoint is in
+  `apps/api/src/app.ts`; orchestration is in
+  `apps/api/src/settings/connection-validation-service.ts`; the scoped lookup
+  is in `apps/api/src/persistence/identity-repository.ts`. These are source
+  paths, not runtime configuration, and have no mirrors. The server entrypoint
+  intentionally does not compose a validation client, so no deployed service
+  reads a live transport configuration.
+- **Limitations:** production calls return `VALIDATION_NOT_CONFIGURED` pending
+  a separately reviewed live Resend transport composition. Validation status is
+  not persisted; audit logging, retries, and provider-error telemetry remain
+  deferred.
+- **Operational impact:** no runtime configuration, secret, systemd unit,
+  certificate, deployment artifact, or external provider state changed. The
+  temporary Compose stack used an ephemeral password and was removed with its
+  volumes after verification.

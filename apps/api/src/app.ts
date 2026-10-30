@@ -2,10 +2,12 @@ import Fastify from "fastify";
 
 import { AuthService } from "./auth/auth-service.js";
 import { ConnectionSettingsService } from "./settings/connection-settings-service.js";
+import { ConnectionValidationService } from "./settings/connection-validation-service.js";
 
 export interface AppOptions {
   authService?: AuthService;
   connectionSettingsService?: ConnectionSettingsService;
+  connectionValidationService?: ConnectionValidationService;
   secureCookies?: boolean;
 }
 
@@ -175,6 +177,49 @@ export const buildApp = (options: AppOptions = {}) => {
     }
   });
 
+  app.post("/v1/connections/:connectionId/validate", async (request, reply) => {
+    if (!options.authService) {
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    }
+
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+
+    if (!account) {
+      return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    }
+
+    if (account.role !== "owner") {
+      return reply.code(403).send({ error: "OWNER_REQUIRED" });
+    }
+
+    if (!options.connectionValidationService) {
+      return reply.code(503).send({ error: "VALIDATION_NOT_CONFIGURED" });
+    }
+
+    const { connectionId } = request.params as { connectionId?: string };
+
+    if (!connectionId) {
+      return reply.code(400).send({ error: "INVALID_CONNECTION_ID" });
+    }
+
+    try {
+      return {
+        status: await options.connectionValidationService.validateConnection({
+          account,
+          connectionId,
+        }),
+      };
+    } catch (error) {
+      const code = validationErrorCode(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 404)
+        .send({ error: code });
+    }
+  });
+
   return app;
 };
 
@@ -288,6 +333,11 @@ const connectionErrorCode = (error: unknown) =>
   ["INVALID_CONNECTION_INPUT", "OWNER_REQUIRED"].includes(errorMessage(error))
     ? errorMessage(error)
     : "CONNECTION_CONFIGURATION_FAILED";
+
+const validationErrorCode = (error: unknown) =>
+  errorMessage(error) === "OWNER_REQUIRED"
+    ? "OWNER_REQUIRED"
+    : "CONNECTION_NOT_FOUND";
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "UNKNOWN_ERROR";

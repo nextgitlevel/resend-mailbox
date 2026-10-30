@@ -3,6 +3,49 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-30 — Owner-only on-demand connection validation
+
+**Outcome:** added a redacted, fixture-backed validation endpoint for an
+existing encrypted connection, while retaining the deliberate no-live-provider
+boundary.
+
+**Acceptance criteria met:**
+
+- `POST /v1/connections/:connectionId/validate` returns `401` without a valid
+  session, `403` for a non-Owner before an envelope lookup, and the same `404`
+  for missing or cross-organization connections.
+- The service uses an organization-and-connection-scoped repository query,
+  decrypts the authorized envelope only in server memory, passes it only to an
+  injected validator, and returns only `connected`, `invalid_credentials`, or
+  `unavailable`.
+- Fixtures cover success, unauthorized, transient provider failure, missing
+  connections, and decryption failure. No status is persisted and responses
+  never include the credential.
+- No live Resend SDK or transport, credential logging, domain configuration,
+  mailbox provisioning, invitations, or inbound routing was added.
+
+**Test-first evidence:**
+
+- The initial focused service and route run failed because
+  `connection-validation-service` did not exist.
+- The focused suite then passed (6 tests), including authorization and
+  organization-isolation paths, secret nonexposure, and no-validator-call on
+  decryption failure.
+
+**Verification:**
+
+```bash
+node --import tsx --test test/connection-validation-service.test.ts test/connection-validation-routes.test.ts
+DATABASE_URL='postgresql://resend_mailbox:compose-probe-only@127.0.0.1:15432/resend_mailbox' corepack pnpm --filter @resend-mailbox/api test
+corepack pnpm verify
+git diff --check
+```
+
+**Result:** passed. The database command ran against an isolated disposable
+Compose stack, which was removed with its volumes afterward. Production server
+composition deliberately leaves validation unwired, returning
+`VALIDATION_NOT_CONFIGURED` until a separately reviewed live transport slice.
+
 ## 2026-10-30 — deterministic Resend connection-validation contract
 
 **Outcome:** added an injectable, server-side validation contract with
