@@ -16,6 +16,7 @@ const createRepository = (): AuthRepository & {
     userId: string;
     email: string;
     organizationId: string;
+    role: "owner";
     expiresAt: Date;
     revokedAt: Date | null;
   } | null = null;
@@ -35,12 +36,14 @@ const createRepository = (): AuthRepository & {
         userId: "user-1",
         organizationId: "organization-1",
         email: "owner@example.test",
+        role: "owner",
       };
     },
     findUserForLogin: async () => ({
       userId: "user-1",
       organizationId: "organization-1",
       email: "owner@example.test",
+      role: "owner",
       passwordHash: passwords[0] ?? null,
     }),
     createSession: async ({ tokenHash, expiresAt }) => {
@@ -50,6 +53,7 @@ const createRepository = (): AuthRepository & {
         userId: "user-1",
         organizationId: "organization-1",
         email: "owner@example.test",
+        role: "owner",
         expiresAt,
         revokedAt: null,
       };
@@ -123,6 +127,7 @@ test("bootstrap is single-use and session authentication rejects malformed, expi
       userId: "user-1",
       organizationId: "organization-1",
       email: "owner@example.test",
+      role: "owner",
     },
   );
   repository.setSessionState({

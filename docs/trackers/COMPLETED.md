@@ -222,3 +222,43 @@ corepack pnpm --filter @resend-mailbox/api lint
 **Result:** passed. The temporary Compose stack, generated schemas, and named
 test volumes were removed after proof. No account, secret, live email, or
 deployment service was created.
+
+## 2026-10-30 — encrypted Owner connection settings
+
+**Outcome:** added Owner-only, organization-scoped Resend connection settings
+with envelope-encrypted API credentials and redacted connection status reads.
+
+**Acceptance criteria met:**
+
+- `POST /v1/connections` and `GET /v1/connections/:connectionId` require an
+  authenticated Owner; unauthenticated requests receive `401` and member-role
+  requests receive `403`.
+- Each submitted credential is encrypted with a unique AES-256-GCM DEK; the
+  database stores ciphertext, nonce, wrapped DEK, key version, and algorithm,
+  never plaintext. Responses exclude every secret-bearing field.
+- Tampering, wrong KEK material, malformed wrapping data, and absent settings
+  wiring fail closed. Database proof confirms the submitted fixture is absent
+  from persisted envelope fields.
+- The local development server wires settings only when `NODE_ENV=development`
+  and a valid `ENCRYPTION_MASTER_KEY` is provided. Production remains disabled
+  pending a separately reviewed KMS provider.
+
+**Test-first evidence:**
+
+- The API suite initially failed because both settings modules were absent.
+- The development-key test exposed non-canonical base64url acceptance; strict
+  decoding now rejects the malformed wrapping data.
+
+**Verification:**
+
+```bash
+corepack pnpm verify
+sudo env POSTGRES_PASSWORD=compose-probe-only docker compose -f compose.dev.yaml up -d --wait --wait-timeout 60
+DATABASE_URL='postgresql://resend_mailbox:compose-probe-only@127.0.0.1:15432/resend_mailbox' corepack pnpm --filter @resend-mailbox/api test
+sudo env POSTGRES_PASSWORD=compose-probe-only docker compose -f compose.dev.yaml down --volumes --remove-orphans
+git diff --check
+```
+
+**Result:** passed, including independent test-runner and quality review. The
+test stack and its volumes were removed. No Resend API request, account,
+domain, live runtime configuration, or deployment artifact was created.

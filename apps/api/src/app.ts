@@ -1,9 +1,11 @@
 import Fastify from "fastify";
 
 import { AuthService } from "./auth/auth-service.js";
+import { ConnectionSettingsService } from "./settings/connection-settings-service.js";
 
 export interface AppOptions {
   authService?: AuthService;
+  connectionSettingsService?: ConnectionSettingsService;
   secureCookies?: boolean;
 }
 
@@ -88,6 +90,91 @@ export const buildApp = (options: AppOptions = {}) => {
     return { account };
   });
 
+  app.post("/v1/connections", async (request, reply) => {
+    if (!options.authService) {
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    }
+
+    if (!options.connectionSettingsService) {
+      return reply.code(503).send({ error: "SETTINGS_NOT_CONFIGURED" });
+    }
+
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+
+    if (!account) {
+      return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    }
+
+    const input = readConnectionRequest(request.body);
+
+    if (!input) {
+      return reply.code(400).send({ error: "INVALID_CONNECTION_INPUT" });
+    }
+
+    try {
+      const connection =
+        await options.connectionSettingsService.createConnection({
+          account,
+          ...input,
+        });
+
+      return reply.code(201).send({ connection });
+    } catch (error) {
+      const code = connectionErrorCode(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
+        .send({ error: code });
+    }
+  });
+
+  app.get("/v1/connections/:connectionId", async (request, reply) => {
+    if (!options.authService) {
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    }
+
+    if (!options.connectionSettingsService) {
+      return reply.code(503).send({ error: "SETTINGS_NOT_CONFIGURED" });
+    }
+
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+
+    if (!account) {
+      return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    }
+
+    const { connectionId } = request.params as { connectionId?: string };
+
+    if (!connectionId) {
+      return reply.code(400).send({ error: "INVALID_CONNECTION_ID" });
+    }
+
+    try {
+      const connection = await options.connectionSettingsService.findConnection(
+        {
+          account,
+          connectionId,
+        },
+      );
+
+      if (!connection) {
+        return reply.code(404).send({ error: "CONNECTION_NOT_FOUND" });
+      }
+
+      return { connection };
+    } catch (error) {
+      const code = connectionErrorCode(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
+        .send({ error: code });
+    }
+  });
+
   return app;
 };
 
@@ -119,6 +206,27 @@ const readLoginRequest = (body: unknown) => {
   }
 
   return { email: body.email, password: body.password };
+};
+
+const readConnectionRequest = (body: unknown) => {
+  if (
+    !isRecord(body) ||
+    typeof body.name !== "string" ||
+    typeof body.apiKey !== "string"
+  ) {
+    return null;
+  }
+
+  return { name: body.name, apiKey: body.apiKey };
+};
+
+const authenticateRequest = (
+  cookieHeader: string | undefined,
+  authService: AuthService,
+) => {
+  const token = readSessionCookie(cookieHeader);
+
+  return token ? authService.authenticateSession(token) : null;
 };
 
 const readHeaderValue = (value: string | string[] | undefined) =>
@@ -175,6 +283,11 @@ const bootstrapErrorCode = (error: unknown) =>
     BOOTSTRAP_UNAVAILABLE: "BOOTSTRAP_UNAVAILABLE",
     BOOTSTRAP_NOT_AUTHORIZED: "BOOTSTRAP_NOT_AUTHORIZED",
   })[errorMessage(error)] ?? "INVALID_BOOTSTRAP_INPUT";
+
+const connectionErrorCode = (error: unknown) =>
+  ["INVALID_CONNECTION_INPUT", "OWNER_REQUIRED"].includes(errorMessage(error))
+    ? errorMessage(error)
+    : "CONNECTION_CONFIGURATION_FAILED";
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "UNKNOWN_ERROR";

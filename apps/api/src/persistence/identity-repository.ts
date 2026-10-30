@@ -8,6 +8,7 @@ export type MembershipRole = "owner" | "admin" | "member";
 
 export interface EncryptedSecretEnvelope {
   ciphertext: string;
+  nonce: string;
   wrappedDek: string;
   keyVersion: string;
   algorithm: string;
@@ -43,6 +44,12 @@ export interface RedactedConnection {
   name: string;
   secretConfigured: boolean;
   keyVersion: string | null;
+}
+
+export interface CreateConnectionInput {
+  organizationId: string;
+  name: string;
+  encryptedEnvelope: EncryptedSecretEnvelope;
 }
 
 interface ConnectionRow extends QueryResultRow {
@@ -94,6 +101,7 @@ const upStatements = [
       organization_id UUID NOT NULL,
       connection_id UUID NOT NULL,
       ciphertext TEXT NOT NULL CHECK (char_length(ciphertext) > 0),
+      nonce TEXT NOT NULL CHECK (char_length(nonce) > 0),
       wrapped_dek TEXT NOT NULL CHECK (char_length(wrapped_dek) > 0),
       key_version TEXT NOT NULL CHECK (char_length(key_version) BETWEEN 1 AND 200),
       algorithm TEXT NOT NULL CHECK (char_length(algorithm) BETWEEN 1 AND 200),
@@ -183,8 +191,8 @@ export class PostgresIdentityRepository {
         text: `
           INSERT INTO connection_secret_envelopes (
             id, organization_id, connection_id, ciphertext, wrapped_dek,
-            key_version, algorithm
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            nonce, key_version, algorithm
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `,
         values: [
           randomUUID(),
@@ -192,6 +200,7 @@ export class PostgresIdentityRepository {
           connectionId,
           input.encryptedEnvelope.ciphertext,
           input.encryptedEnvelope.wrappedDek,
+          input.encryptedEnvelope.nonce,
           input.encryptedEnvelope.keyVersion,
           input.encryptedEnvelope.algorithm,
         ],
@@ -211,6 +220,49 @@ export class PostgresIdentityRepository {
     await this.insertMembership(this.pool, input);
   }
 
+  public async createConnection(
+    input: CreateConnectionInput,
+  ): Promise<RedactedConnection> {
+    const connectionId = randomUUID();
+
+    await this.pool.query({
+      text: `
+        WITH created_connection AS (
+          INSERT INTO resend_connections (id, organization_id, name)
+          VALUES ($1, $2, $3)
+          RETURNING id, organization_id, name
+        ), created_envelope AS (
+          INSERT INTO connection_secret_envelopes (
+            id, organization_id, connection_id, ciphertext, nonce, wrapped_dek,
+            key_version, algorithm
+          )
+          SELECT $4, organization_id, id, $5, $6, $7, $8, $9
+          FROM created_connection
+        )
+        SELECT id, organization_id, name FROM created_connection
+      `,
+      values: [
+        connectionId,
+        input.organizationId,
+        input.name,
+        randomUUID(),
+        input.encryptedEnvelope.ciphertext,
+        input.encryptedEnvelope.nonce,
+        input.encryptedEnvelope.wrappedDek,
+        input.encryptedEnvelope.keyVersion,
+        input.encryptedEnvelope.algorithm,
+      ],
+    });
+
+    return {
+      id: connectionId,
+      organizationId: input.organizationId,
+      name: input.name,
+      secretConfigured: true,
+      keyVersion: input.encryptedEnvelope.keyVersion,
+    };
+  }
+
   public async hasOwner(): Promise<boolean> {
     const result = await this.pool.query({
       text: "SELECT 1 FROM instance_bootstrap LIMIT 1",
@@ -223,7 +275,12 @@ export class PostgresIdentityRepository {
     email: string;
     organizationName: string;
     passwordHash: string;
-  }): Promise<{ userId: string; organizationId: string; email: string }> {
+  }): Promise<{
+    userId: string;
+    organizationId: string;
+    email: string;
+    role: "owner";
+  }> {
     const userId = randomUUID();
     const organizationId = randomUUID();
     const client = await this.pool.connect();
@@ -266,7 +323,7 @@ export class PostgresIdentityRepository {
       });
       await client.query("COMMIT");
 
-      return { userId, organizationId, email };
+      return { userId, organizationId, email, role: "owner" };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -279,16 +336,18 @@ export class PostgresIdentityRepository {
     userId: string;
     organizationId: string;
     email: string;
+    role: MembershipRole;
     passwordHash: string | null;
   } | null> {
     const result = await this.pool.query<{
       user_id: string;
       organization_id: string;
       email: string;
+      role: MembershipRole;
       password_hash: string | null;
     }>({
       text: `
-        SELECT app_user.id AS user_id, membership.organization_id, app_user.email,
+        SELECT app_user.id AS user_id, membership.organization_id, app_user.email, membership.role,
           app_user.password_hash
         FROM users AS app_user
         INNER JOIN organization_memberships AS membership
@@ -304,6 +363,7 @@ export class PostgresIdentityRepository {
           userId: row.user_id,
           organizationId: row.organization_id,
           email: row.email,
+          role: row.role,
           passwordHash: row.password_hash,
         }
       : null;
@@ -327,6 +387,7 @@ export class PostgresIdentityRepository {
     userId: string;
     organizationId: string;
     email: string;
+    role: MembershipRole;
     expiresAt: Date;
     revokedAt: Date | null;
   } | null> {
@@ -334,11 +395,12 @@ export class PostgresIdentityRepository {
       user_id: string;
       organization_id: string;
       email: string;
+      role: MembershipRole;
       expires_at: Date;
       revoked_at: Date | null;
     }>({
       text: `
-        SELECT login_session.user_id, membership.organization_id, app_user.email,
+        SELECT login_session.user_id, membership.organization_id, app_user.email, membership.role,
           login_session.expires_at, login_session.revoked_at
         FROM sessions AS login_session
         INNER JOIN users AS app_user ON app_user.id = login_session.user_id
@@ -355,6 +417,7 @@ export class PostgresIdentityRepository {
           userId: row.user_id,
           organizationId: row.organization_id,
           email: row.email,
+          role: row.role,
           expiresAt: row.expires_at,
           revokedAt: row.revoked_at,
         }

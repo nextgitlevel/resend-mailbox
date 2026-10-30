@@ -143,3 +143,27 @@ diff --check` passed; independent test and quality review passed.
 - **Operational impact:** the proof-only Compose stack was removed. No live
   service reads the changed application code, and no persistent credential,
   deployment artifact, or Property Intelligence component changed.
+
+## 2026-10-30 — encrypted Owner connection settings
+
+- **Intended outcome:** permit an Owner to configure a Resend connection
+  without exposing its credential through the client, database plaintext, or
+  settings responses.
+- **Proof:** `corepack pnpm verify` passed. The disposable PostgreSQL run
+  passed all 16 API tests, including Owner-only create/read, member denial,
+  AES-GCM envelope tamper rejection, KEK unwrap failure, and a direct database
+  assertion that the credential fixture was not stored in envelope columns.
+- **Authoritative application paths:** API behavior is in `apps/api/src/app.ts`;
+  encryption and the local development KEK wrapper are in
+  `apps/api/src/settings/`; persistence is in
+  `apps/api/src/persistence/identity-repository.ts`. The server reads
+  `ENCRYPTION_MASTER_KEY` only when `NODE_ENV=development`; `.env.example` is
+  a non-live template and has no mirrored runtime copy. No live service reads
+  these paths because this application has not been deployed.
+- **Limitations:** there is no live Resend validation, production KMS,
+  domain verification, mailbox provisioning, invitation flow, or inbound
+  routing. Production deliberately returns `SETTINGS_NOT_CONFIGURED` until a
+  reviewed KMS composition is supplied.
+- **Operational impact:** no runtime configuration, secret, systemd unit,
+  certificate, deployment artifact, or external provider state changed. The
+  disposable Compose stack and volumes were removed after proof.

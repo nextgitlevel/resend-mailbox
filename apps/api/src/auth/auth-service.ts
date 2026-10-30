@@ -4,6 +4,7 @@ export interface AuthAccount {
   userId: string;
   organizationId: string;
   email: string;
+  role: "owner" | "admin" | "member";
 }
 
 export interface AuthRepository {
@@ -120,6 +121,7 @@ export class AuthService {
       userId: session.userId,
       organizationId: session.organizationId,
       email: session.email,
+      role: session.role,
     };
   }
 

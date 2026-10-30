@@ -10,15 +10,36 @@ import {
   PostgresIdentityRepository,
   revertIdentitySchema,
 } from "../src/persistence/identity-repository.js";
+import { ConnectionSettingsService } from "../src/settings/connection-settings-service.js";
+import {
+  CredentialEncryptionService,
+  type KeyManagementProvider,
+} from "../src/settings/credential-encryption.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const integrationTest = databaseUrl ? test : test.skip;
 
 const encryptedEnvelope = {
   ciphertext: "base64-ciphertext-fixture",
+  nonce: "base64-nonce-fixture",
   wrappedDek: "base64-wrapped-dek-fixture",
   keyVersion: "test-kek-v1",
   algorithm: "test-aead",
+};
+
+const integrationKeyProvider: KeyManagementProvider = {
+  activeKeyVersion: "integration-kek-v1",
+  wrapKey: async ({ plaintextDek, keyVersion }) =>
+    `${keyVersion}:${plaintextDek.toString("base64url")}`,
+  unwrapKey: async ({ wrappedDek, keyVersion }) => {
+    const [storedVersion, encodedDek] = wrappedDek.split(":");
+
+    if (storedVersion !== keyVersion || !encodedDek) {
+      throw new Error("KEY_UNWRAP_FAILED");
+    }
+
+    return Buffer.from(encodedDek, "base64url");
+  },
 };
 
 const createIsolatedSchema = async () => {
@@ -57,6 +78,49 @@ const createIsolatedSchema = async () => {
     },
   };
 };
+
+integrationTest(
+  "Owner connection configuration stores an encrypted credential without its plaintext",
+  async (t) => {
+    const { pool, cleanup } = await createIsolatedSchema();
+    const repository = new PostgresIdentityRepository(pool);
+    const authService = new AuthService(repository, {
+      bootstrapToken: "test-bootstrap-token",
+      randomToken: () => "owner-session-token-for-integration-test-only",
+    });
+    const settingsService = new ConnectionSettingsService(
+      repository,
+      new CredentialEncryptionService(integrationKeyProvider),
+    );
+    const apiKey =
+      "test_integration_credential_that_must_not_be_stored_plaintext";
+
+    t.after(cleanup);
+
+    const { account } = await authService.bootstrapOwner({
+      email: "owner@example.test",
+      organizationName: "NextLevel",
+      password: "a long test-only password",
+      bootstrapToken: "test-bootstrap-token",
+    });
+    const connection = await settingsService.createConnection({
+      account,
+      name: "Primary Resend",
+      apiKey,
+    });
+    const stored = await pool.query<{
+      ciphertext: string;
+      nonce: string;
+      wrapped_dek: string;
+    }>(
+      "SELECT ciphertext, nonce, wrapped_dek FROM connection_secret_envelopes",
+    );
+
+    assert.equal(connection.secretConfigured, true);
+    assert.equal(stored.rowCount, 1);
+    assert.equal(JSON.stringify(stored.rows).includes(apiKey), false);
+  },
+);
 
 integrationTest(
   "organization bootstrap persists a redacted encrypted connection and isolates other organizations",
@@ -193,15 +257,16 @@ integrationTest(
       pool.query({
         text: `
           INSERT INTO ${schema}.connection_secret_envelopes (
-            id, organization_id, connection_id, ciphertext, wrapped_dek,
+            id, organization_id, connection_id, ciphertext, nonce, wrapped_dek,
             key_version, algorithm
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `,
         values: [
           randomUUID(),
           second.organizationId,
           unassignedFirstConnectionId,
           encryptedEnvelope.ciphertext,
+          encryptedEnvelope.nonce,
           encryptedEnvelope.wrappedDek,
           encryptedEnvelope.keyVersion,
           encryptedEnvelope.algorithm,

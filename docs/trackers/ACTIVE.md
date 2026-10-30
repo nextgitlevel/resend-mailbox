@@ -2,14 +2,14 @@
 
 ## Next task
 
-Implement the Sprint 1 encrypted-settings service and Owner-only connection
-settings API on top of the identity repository. Do not add a live Resend call,
-production KMS provider, or deployment service.
+Implement connection validation/status reporting using deterministic Resend API
+fixtures. Do not use live credentials, add domain configuration, mailbox
+provisioning, invitations, or inbound routing.
 
 ## Acceptance criteria
 
-- Pending definition of acceptance criteria and test-first proof for encrypted
-  settings and Owner-only connection administration.
+- Pending definition of acceptance criteria and test-first proof for
+  deterministic validation/status reporting.
 
 ## Test-first evidence
 

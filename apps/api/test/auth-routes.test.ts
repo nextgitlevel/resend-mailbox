@@ -18,12 +18,14 @@ const createAuthService = () => {
         userId: "user-1",
         organizationId: "organization-1",
         email: input.email,
+        role: "owner",
       };
     },
     findUserForLogin: async () => ({
       userId: "user-1",
       organizationId: "organization-1",
       email: "owner@example.test",
+      role: "owner",
       passwordHash,
     }),
     createSession: async (input) => {
@@ -38,6 +40,7 @@ const createAuthService = () => {
         userId: "user-1",
         organizationId: "organization-1",
         email: "owner@example.test",
+        role: "owner",
         expiresAt: new Date("2026-11-29T00:00:00.000Z"),
         revokedAt: null,
       };
@@ -79,6 +82,7 @@ test("bootstrap sets an HttpOnly session cookie without returning its token", as
       userId: "user-1",
       organizationId: "organization-1",
       email: "owner@example.test",
+      role: "owner",
     },
   });
   assert.equal(
@@ -102,6 +106,7 @@ test("bootstrap sets an HttpOnly session cookie without returning its token", as
       userId: "user-1",
       organizationId: "organization-1",
       email: "owner@example.test",
+      role: "owner",
     },
   });
 });
