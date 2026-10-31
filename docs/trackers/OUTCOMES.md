@@ -1,5 +1,23 @@
 # Outcomes and proof
 
+## 2026-10-31 — recoverable outbound delivery and status
+
+- **Commit:** `d2c20e5`.
+- **Outcome:** durable claims use a 120-second lease and five-attempt limit;
+  transient failures use exponential backoff with jitter and reuse the stable
+  provider idempotency key. After the documented Resend 24-hour retention
+  window, an attempted send becomes `delivery_outcome_unknown`. The Owner API
+  exposes organization-scoped safe status only.
+- **Evidence:** worker tests cover retry delays/cap, stable idempotency,
+  non-retryable failure, and lease attempt accounting. HTTP fixtures cover
+  retryable statuses and distinguish concurrent from mismatched idempotency
+  conflicts. PostgreSQL integration cases were added for lease recovery,
+  cross-organization status isolation, and retention expiry.
+- **Verification:** `corepack pnpm verify` passed (API tests: 54 passed, 8
+  integration tests skipped); `git diff --check` passed. The database cases
+  need a rerun where the Docker daemon is accessible.
+- **Decision record:** `docs/adr/0004-outbound-delivery-retries.md`.
+
 ## 2026-10-31 — live development Resend outbound delivery
 
 - **Proof:** queue payload binds the selected organization-owned Resend
