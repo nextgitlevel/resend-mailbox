@@ -2,38 +2,41 @@
 
 ## Slice ID
 
-S3.outbound
+mail.send-receive-v1
 
 ## Next task
 
-Sprint 3 — build a responsive authenticated compose and delivery-status view
-that submits to the existing API and gives clear retry/failure feedback.
+Complete Owner setup of a live Resend connection, verified domain, mailbox,
+and allowed sender through the client before beginning inbound delivery.
 
 ## Acceptance criteria
 
-- Owner can compose plain-text mail, select only a configured sender, and
-  submit it with a fresh idempotency key and active session cookie.
-- Show queued send status and poll the safe status endpoint until sent or
-  failed; explain unknown outcome without inviting blind resends.
-- Handle unauthenticated, unauthorized sender, validation, network, and
-  provider failure states without exposing credentials.
-- Keep web layout useful on desktop and mobile; no attachment or rich HTML
-  support until the corresponding server-side security work is approved.
-- Component tests cover successful submission, idempotent request key, status
-  transitions, and user-visible errors; no network in tests.
+- Complete a usable plain-text send flow with authenticated Owner session,
+  verified configured sender selection, stable idempotent queueing, bounded
+  provider retries, and safe delivery status.
+- Receive `email.received` only after raw-body signature verification; dedupe
+  provider event IDs and route only to verified configured recipient addresses.
+- Retrieve the full received message from Resend through the correct
+  organization-owned connection, persist it, and expose mailbox-scoped inbox
+  list/detail APIs and UI.
+- Cover invalid signatures, malformed events, duplicates, unknown/unverified
+  recipients, foreign organizations, Resend errors, and no-network fixtures.
+- Keep provider credentials server-side. Do not fetch/store attachments or
+  render untrusted HTML in this vertical slice.
+- The client must work on desktop web and remain usable on mobile widths.
 
-## Completed implementation slice
+## Completed send-side work
 
-- Development-only Resend transport and worker are implemented and tested.
+- Development-only Resend delivery worker, retry state machine, Owner-scoped
+  status endpoint, exact-origin credentialed CORS, safe sender listing, and
+  responsive Expo compose/sign-in view are implemented.
+- The browser API client uses HttpOnly session cookies and retains the same
+  idempotency key for an ambiguous network retry while the page remains open.
 - Production KMS/worker composition remains intentionally disabled.
-- Verification: `corepack pnpm verify` passed; database integration was
-  skipped because the Docker daemon socket denied access.
 
-## Test-first evidence for this task
+## Executive scope decision
 
-- Red: `cd apps/api && node --import tsx --test
-test/outbound-delivery-worker.test.ts` failed when the attempt limit was
-  temporarily set to four; the bounded-retry test detected premature
-  exhaustion. Restored the intended five-attempt limit, which the test covers.
-- `corepack pnpm verify` passed after implementing bounded retry/status behavior
-  (API: 54 passed, 8 PostgreSQL tests skipped). `git diff --check` passed.
+Prioritize a complete basic send/receive vertical slice. Drafts, forwarding,
+attachments, rich HTML display, multi-user grants, and production KMS/deployment
+remain planned follow-up work. Do not block basic inbox delivery on those
+features.

@@ -27,3 +27,16 @@ to clients.
 This worker refuses to start outside `NODE_ENV=development`. Production use
 requires a reviewed KMS implementation and deployment-managed key/runtime
 configuration. Do not use development key management for production data.
+
+## Local development client
+
+Set `CLIENT_ORIGIN` in the API process to the exact Expo web origin (for
+example, `http://localhost:8081`) so credentialed browser requests pass the
+API's origin check. Set the Expo public variable
+`EXPO_PUBLIC_API_BASE_URL` to the API base URL before starting the client; web
+defaults to `http://localhost:3001`. Keep the hostname consistent between the
+web app origin and API URL so the browser treats the HttpOnly session cookie
+as same-site. Native devices need a reachable API host
+instead of loopback. The API permits cookie credentials only for the exact
+configured browser origin. `.env.example` is the development template; it is
+not read by the live service unless explicitly copied into a local `.env`.

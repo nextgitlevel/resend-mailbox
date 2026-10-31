@@ -3,6 +3,32 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-31 — authenticated plain-text compose and send status UI
+
+**Outcome:** the Expo client now provides owner bootstrap/sign-in, verified
+sender selection, a responsive plain-text compose form, stable idempotency for
+ambiguous retries during the page session, and polling of safe delivery status.
+The API lists only verified organization-owned senders and applies exact-origin
+CORS with credentials for the configured browser app.
+
+**Test-first evidence:** the authenticated sender-list route test failed when
+the route was temporarily changed to return an empty list, then passed after
+the route/repository mapping was restored. Client API tests cover credentialed
+requests, bootstrap-token header handling, idempotency payload, status lookup,
+and redacted network errors.
+
+**Verification:** `corepack pnpm verify` passed (API: 56 passed, 8 PostgreSQL
+integration tests skipped; client: 3 passed). `corepack pnpm --filter
+@resend-mailbox/client exec expo export --platform web` completed successfully.
+`git diff --check` passed. PostgreSQL integration tests remain to be rerun
+where Docker daemon access is available.
+
+**Operational impact:** only `.env.example` changed as a template. The live API
+reads `CLIENT_ORIGIN` from its process environment; the Expo bundle reads
+`EXPO_PUBLIC_API_BASE_URL` at build time. There is no mirrored runtime file or
+symlink, and no live service/configuration was changed. Production outbound
+delivery remains disabled pending reviewed KMS and worker operations.
+
 ## 2026-10-31 — live development Resend outbound delivery
 
 **Outcome:** outbound queue records the selected organization-owned connection,

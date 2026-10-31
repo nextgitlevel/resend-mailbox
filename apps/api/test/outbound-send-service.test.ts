@@ -19,6 +19,7 @@ test("Owner queues an idempotent normalized outbound send without a provider cal
   try {
     const records: unknown[] = [];
     const service = new OutboundSendService({
+      listAllowedSenders: async () => [],
       isAllowedSender: async () => ({
         connectionId: "connection-1",
         replyTo: null,
@@ -53,6 +54,7 @@ test("Owner queues an idempotent normalized outbound send without a provider cal
 
 test("outbound queue rejects unauthorized, invalid, foreign, and mismatched idempotency requests", async () => {
   const service = new OutboundSendService({
+    listAllowedSenders: async () => [],
     isAllowedSender: async () => null,
     queue: async () => {
       throw new Error("IDEMPOTENCY_KEY_REUSED");
@@ -93,6 +95,7 @@ test("outbound queue rejects unauthorized, invalid, foreign, and mismatched idem
     /SENDER_NOT_ALLOWED/,
   );
   const contentService = new OutboundSendService({
+    listAllowedSenders: async () => [],
     isAllowedSender: async () => ({
       connectionId: "connection-1",
       replyTo: null,

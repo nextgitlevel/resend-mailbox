@@ -23,8 +23,11 @@ const auth = (role: "owner" | "member" = "owner") =>
       revokedAt: null,
     }),
   } satisfies AuthRepository);
-const service = () =>
+const service = (
+  allowedSenders: { address: string; replyTo: string | null }[] = [],
+) =>
   new OutboundSendService({
+    listAllowedSenders: async () => allowedSenders,
     isAllowedSender: async () => ({
       connectionId: "connection-1",
       replyTo: null,
@@ -93,5 +96,63 @@ test("outbound status route conceals missing and foreign send identifiers", asyn
     headers: { cookie },
   });
   assert.equal(missing.statusCode, 404);
+  assert.equal(forbidden.statusCode, 403);
+});
+
+test("API CORS allows credentials only from the configured exact client origin", async (t) => {
+  const app = buildApp({ clientOrigin: "http://localhost:8081" });
+  t.after(() => app.close());
+  const allowed = await app.inject({
+    method: "OPTIONS",
+    url: "/v1/login",
+    headers: {
+      origin: "http://localhost:8081",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type,x-bootstrap-token",
+    },
+  });
+  const rejected = await app.inject({
+    method: "OPTIONS",
+    url: "/v1/login",
+    headers: { origin: "https://attacker.example" },
+  });
+  assert.equal(allowed.statusCode, 204);
+  assert.equal(
+    allowed.headers["access-control-allow-origin"],
+    "http://localhost:8081",
+  );
+  assert.equal(allowed.headers["access-control-allow-credentials"], "true");
+  assert.equal(rejected.statusCode, 403);
+  assert.equal(rejected.headers["access-control-allow-origin"], undefined);
+});
+
+test("outbound sender list is authenticated and organization scoped", async (t) => {
+  const app = buildApp({
+    authService: auth(),
+    outboundSendService: service([
+      { address: "support@example.test", replyTo: "reply@example.test" },
+    ]),
+  });
+  const member = buildApp({
+    authService: auth("member"),
+    outboundSendService: service(),
+  });
+  t.after(async () => Promise.all([app.close(), member.close()]));
+  const response = await app.inject({
+    method: "GET",
+    url: "/v1/outbound-senders",
+    headers: { cookie },
+  });
+  const forbidden = await member.inject({
+    method: "GET",
+    url: "/v1/outbound-senders",
+    headers: { cookie },
+  });
+  assert.deepEqual(response.json(), {
+    senders: [
+      { address: "support@example.test", replyTo: "reply@example.test" },
+    ],
+  });
+  assert.equal(response.statusCode, 200);
   assert.equal(forbidden.statusCode, 403);
 });

@@ -536,6 +536,20 @@ integrationTest(
       replyTo: "reply@nextlevelmaintenance.com",
       isDefaultSender: true,
     });
+    assert.deepEqual(
+      await repository.listAllowedSenders(first.organizationId),
+      [
+        {
+          address: "marcus@nextlevelmaintenance.com",
+          replyTo: "reply@nextlevelmaintenance.com",
+        },
+        { address: "support@nextlevelmaintenance.com", replyTo: null },
+      ],
+    );
+    assert.deepEqual(
+      await repository.listAllowedSenders(second.organizationId),
+      [],
+    );
     const secondPolicy =
       await repository.updateAllowedAddressPolicyForOrganization({
         organizationId: first.organizationId,

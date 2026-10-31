@@ -22,12 +22,31 @@ export interface AppOptions {
   webhookReceiptService?: WebhookReceiptService;
   outboundSendService?: OutboundSendService;
   secureCookies?: boolean;
+  clientOrigin?: string;
 }
 
 export const buildApp = (options: AppOptions = {}) => {
   const app = Fastify({ logger: true });
   const secureCookies =
     options.secureCookies ?? process.env.NODE_ENV === "production";
+  const clientOrigin = options.clientOrigin ?? process.env.CLIENT_ORIGIN;
+
+  app.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (origin && origin === clientOrigin) {
+      reply.header("Access-Control-Allow-Origin", origin);
+      reply.header("Access-Control-Allow-Credentials", "true");
+      reply.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      reply.header(
+        "Access-Control-Allow-Headers",
+        "Content-Type, X-Bootstrap-Token",
+      );
+      reply.header("Vary", "Origin");
+    }
+    if (request.method === "OPTIONS") {
+      return reply.code(origin && origin === clientOrigin ? 204 : 403).send();
+    }
+  });
 
   app.addHook("preParsing", (request, _reply, payload, done) => {
     const chunks: Buffer[] = [];
@@ -488,6 +507,28 @@ export const buildApp = (options: AppOptions = {}) => {
         text: body.text,
       });
       return reply.code(send.duplicate ? 200 : 201).send({ send });
+    } catch (error) {
+      const code = errorMessage(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
+        .send({ error: code });
+    }
+  });
+
+  app.get("/v1/outbound-senders", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.outboundSendService)
+      return reply.code(503).send({ error: "OUTBOUND_SENDS_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try {
+      return {
+        senders: await options.outboundSendService.listSenders(account),
+      };
     } catch (error) {
       const code = errorMessage(error);
       return reply

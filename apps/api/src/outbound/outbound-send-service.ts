@@ -17,6 +17,7 @@ export interface QueuedOutboundSend {
 }
 
 export interface OutboundSendRepository {
+  listAllowedSenders(organizationId: string): Promise<AllowedOutboundSender[]>;
   isAllowedSender(input: {
     organizationId: string;
     from: string;
@@ -28,6 +29,11 @@ export interface OutboundSendRepository {
     organizationId: string;
     sendId: string;
   }): Promise<OutboundSendStatus | null>;
+}
+
+export interface AllowedOutboundSender {
+  address: string;
+  replyTo: string | null;
 }
 
 export interface OutboundSendStatus {
@@ -46,6 +52,11 @@ export interface OutboundSendStatus {
 
 export class OutboundSendService {
   public constructor(private readonly repository: OutboundSendRepository) {}
+
+  public async listSenders(account: AuthAccount) {
+    if (account.role !== "owner") throw new Error("OWNER_REQUIRED");
+    return this.repository.listAllowedSenders(account.organizationId);
+  }
 
   public async status(input: { account: AuthAccount; sendId: string }) {
     if (input.account.role !== "owner") throw new Error("OWNER_REQUIRED");

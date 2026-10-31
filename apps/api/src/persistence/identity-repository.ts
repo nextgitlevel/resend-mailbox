@@ -8,6 +8,7 @@ import type {
 import type {
   OutboundSendRepository,
   OutboundSendStatus,
+  AllowedOutboundSender,
   QueuedOutboundSend,
 } from "../outbound/outbound-send-service.js";
 import type {
@@ -873,6 +874,28 @@ export class PostgresIdentityRepository
     return row
       ? { connectionId: row.connection_id, replyTo: row.reply_to }
       : null;
+  }
+
+  public async listAllowedSenders(
+    organizationId: string,
+  ): Promise<AllowedOutboundSender[]> {
+    const result = await this.pool.query<{
+      address: string;
+      reply_to: string | null;
+    }>({
+      text: `SELECT address.local_part || '@' || domain.normalized_name AS address,
+               address.reply_to
+             FROM allowed_recipient_addresses AS address
+             INNER JOIN domains AS domain ON domain.id = address.domain_id
+               AND domain.organization_id = address.organization_id
+             WHERE address.organization_id = $1 AND domain.verification_status = 'verified'
+             ORDER BY address.local_part, domain.normalized_name`,
+      values: [organizationId],
+    });
+    return result.rows.map((row) => ({
+      address: row.address,
+      replyTo: row.reply_to,
+    }));
   }
 
   public async queue(
