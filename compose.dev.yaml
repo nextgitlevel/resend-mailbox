@@ -4,13 +4,15 @@ services:
   postgres:
     image: postgres:18.3-alpine
     environment:
-      POSTGRES_DB: resend_mailbox
-      POSTGRES_USER: resend_mailbox
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      RESEND_MAILBOX_TEST_PASSWORD: ${RESEND_MAILBOX_TEST_PASSWORD:?Set RESEND_MAILBOX_TEST_PASSWORD in .env}
     ports:
       - "127.0.0.1:15432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
+      - ./docker/postgres/init-test-role.sh:/docker-entrypoint-initdb.d/10-init-test-role.sh:ro
 
   redis:
     image: redis:8.6-alpine
