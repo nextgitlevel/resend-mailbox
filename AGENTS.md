@@ -26,6 +26,18 @@ Update the trackers as part of every task. Do not begin a new implementation
 while `ACTIVE.md` has a different unresolved task unless the user explicitly
 replaces it.
 
+## Autonomous project advancement
+
+Continue through approved plan work without waiting for per-slice approval.
+Use the documented architecture, ADRs, code contracts, and conservative,
+reversible defaults when details are unspecified. Complete dependent work in
+sequence and select the next independent approved work whenever a task is
+blocked. Record the specific blocker and preserve unfinished work; do not
+treat one blocked item as a reason to stop the project. Return control only
+for a genuinely new product decision, missing authority, or validation that
+cannot proceed safely. Established deployment, credential, and production
+boundaries are constraints to enforce, not recurring approval requests.
+
 ## Test-first implementation protocol
 
 Every behavior change follows red → green → refactor:
