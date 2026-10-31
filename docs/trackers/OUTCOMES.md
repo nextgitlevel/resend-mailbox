@@ -10,6 +10,16 @@ intended outcome. Each entry must include:
   automated proof is insufficient.
 - Known limitations, follow-up work, and rollback notes.
 
+## 2026-10-31 — allowed-address sender and reply-to policy
+
+- **Proof:** strict parser and repository-level validation enforce an exact
+  verified-domain match; a locked transaction plus partial unique index keeps
+  default-sender selection organization-scoped and at most one per domain.
+  Tests cover Owner access, invalid/foreign inputs, direct repository bypass,
+  tenant isolation, and replacement behavior.
+- **Operational impact:** none. Source paths only; no live service or runtime
+  configuration reads this uncommitted development work.
+
 ## 2026-10-31 — provider-authoritative domain verification refresh
 
 - **Decision:** ADR 0005 makes the provider, not the Owner client, the source

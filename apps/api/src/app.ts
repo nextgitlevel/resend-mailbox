@@ -3,6 +3,7 @@ import { Transform } from "node:stream";
 import Fastify from "fastify";
 
 import { AuthService } from "./auth/auth-service.js";
+import { AddressPolicyService } from "./domains/address-policy-service.js";
 import { DomainSettingsService } from "./domains/domain-settings-service.js";
 import { DomainVerificationService } from "./domains/domain-verification-service.js";
 import { WebhookReceiptService } from "./inbound/webhook-receipt-service.js";
@@ -11,6 +12,7 @@ import { ConnectionValidationService } from "./settings/connection-validation-se
 
 export interface AppOptions {
   authService?: AuthService;
+  addressPolicyService?: AddressPolicyService;
   connectionSettingsService?: ConnectionSettingsService;
   connectionValidationService?: ConnectionValidationService;
   domainSettingsService?: DomainSettingsService;
@@ -409,6 +411,48 @@ export const buildApp = (options: AppOptions = {}) => {
         error:
           code === "DOMAIN_NOT_FOUND" ? code : "DOMAIN_VERIFICATION_FAILED",
       });
+    }
+  });
+
+  app.post("/v1/addresses/:addressId/policy", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.addressPolicyService)
+      return reply.code(503).send({ error: "ADDRESS_POLICY_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const { addressId } = request.params as { addressId?: string };
+    const body = request.body;
+    if (
+      !addressId ||
+      !isRecord(body) ||
+      typeof body.isDefaultSender !== "boolean" ||
+      (body.replyTo !== null && typeof body.replyTo !== "string")
+    )
+      return reply.code(400).send({ error: "INVALID_ADDRESS_POLICY_INPUT" });
+    try {
+      return reply.send({
+        address: await options.addressPolicyService.configure({
+          account,
+          addressId,
+          replyTo: body.replyTo as string | null,
+          isDefaultSender: body.isDefaultSender,
+        }),
+      });
+    } catch (error) {
+      const code = errorMessage(error);
+      return reply
+        .code(
+          code === "OWNER_REQUIRED"
+            ? 403
+            : code === "ALLOWED_ADDRESS_NOT_FOUND"
+              ? 404
+              : 400,
+        )
+        .send({ error: code });
     }
   });
 

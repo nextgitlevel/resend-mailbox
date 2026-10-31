@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 
 import { AuthService } from "./auth/auth-service.js";
+import { AddressPolicyService } from "./domains/address-policy-service.js";
 import { buildApp } from "./app.js";
 import { DomainSettingsService } from "./domains/domain-settings-service.js";
 import { WebhookReceiptService } from "./inbound/webhook-receipt-service.js";
@@ -25,6 +26,9 @@ const app = buildApp({
     ? new AuthService(repository, {
         bootstrapToken: process.env.BOOTSTRAP_TOKEN,
       })
+    : undefined,
+  addressPolicyService: repository
+    ? new AddressPolicyService(repository)
     : undefined,
   connectionSettingsService:
     repository && keyManagement

@@ -363,6 +363,62 @@ integrationTest(
       mailboxId: mailbox.id,
       localPart: "marcus",
     });
+    const secondAddress = await repository.createAllowedAddress({
+      organizationId: first.organizationId,
+      domainId: domain.id,
+      mailboxId: mailbox.id,
+      localPart: "support",
+    });
+    await repository.updateAllowedAddressPolicyForOrganization({
+      organizationId: first.organizationId,
+      addressId: address.id,
+      replyTo: "reply@nextlevelmaintenance.com",
+      isDefaultSender: true,
+    });
+    const secondPolicy =
+      await repository.updateAllowedAddressPolicyForOrganization({
+        organizationId: first.organizationId,
+        addressId: secondAddress.id,
+        replyTo: null,
+        isDefaultSender: true,
+      });
+    assert.equal(secondPolicy?.isDefaultSender, true);
+    assert.equal(
+      (
+        await repository.findAllowedAddressForOrganization({
+          organizationId: first.organizationId,
+          addressId: address.id,
+        })
+      )?.isDefaultSender,
+      false,
+    );
+    assert.equal(
+      await repository.updateAllowedAddressPolicyForOrganization({
+        organizationId: second.organizationId,
+        addressId: secondAddress.id,
+        replyTo: null,
+        isDefaultSender: false,
+      }),
+      null,
+    );
+    assert.equal(
+      await repository.updateAllowedAddressPolicyForOrganization({
+        organizationId: first.organizationId,
+        addressId: secondAddress.id,
+        replyTo: "attacker@nextlevelmaintenance.com.bad",
+        isDefaultSender: false,
+      }),
+      null,
+    );
+    assert.equal(
+      (
+        await repository.findAllowedAddressForOrganization({
+          organizationId: first.organizationId,
+          addressId: secondAddress.id,
+        })
+      )?.isDefaultSender,
+      true,
+    );
 
     assert.deepEqual(address, {
       id: address.id,

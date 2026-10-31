@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import type { Pool, PoolClient, QueryResultRow } from "pg";
 import type {
+  AddressPolicyAddress,
+  AddressPolicyRepository,
+} from "../domains/address-policy-service.js";
+import type {
   AllowedAddress,
   DomainSettingsRepository,
   Mailbox,
@@ -160,6 +164,8 @@ const upStatements = [
       domain_id UUID NOT NULL,
       mailbox_id UUID NOT NULL,
       local_part TEXT NOT NULL CHECK (local_part = lower(local_part) AND char_length(local_part) BETWEEN 1 AND 64),
+      reply_to TEXT CHECK (reply_to = lower(reply_to)),
+      is_default_sender BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (domain_id, local_part),
       FOREIGN KEY (organization_id, domain_id)
@@ -168,6 +174,8 @@ const upStatements = [
         REFERENCES mailboxes (organization_id, id) ON DELETE CASCADE
     )
   `,
+  `CREATE UNIQUE INDEX allowed_recipient_addresses_one_default_sender_per_domain
+    ON allowed_recipient_addresses (domain_id) WHERE is_default_sender`,
   `
     CREATE TABLE sessions (
       id UUID PRIMARY KEY,
@@ -222,7 +230,9 @@ export const revertIdentitySchema = async (database: Queryable) => {
   }
 };
 
-export class PostgresIdentityRepository implements DomainSettingsRepository {
+export class PostgresIdentityRepository
+  implements DomainSettingsRepository, AddressPolicyRepository
+{
   public constructor(private readonly pool: Pool) {}
 
   public async bootstrapOwner(
@@ -700,6 +710,111 @@ export class PostgresIdentityRepository implements DomainSettingsRepository {
     return { id, ...input };
   }
 
+  public async findAllowedAddressForOrganization(input: {
+    organizationId: string;
+    addressId: string;
+  }): Promise<AddressPolicyAddress | null> {
+    const result = await this.pool.query<{
+      id: string;
+      organization_id: string;
+      domain_id: string;
+      mailbox_id: string;
+      local_part: string;
+      reply_to: string | null;
+      is_default_sender: boolean;
+    }>({
+      text: "SELECT id, organization_id, domain_id, mailbox_id, local_part, reply_to, is_default_sender FROM allowed_recipient_addresses WHERE organization_id = $1 AND id = $2",
+      values: [input.organizationId, input.addressId],
+    });
+    const row = result.rows[0];
+    return row
+      ? {
+          id: row.id,
+          organizationId: row.organization_id,
+          domainId: row.domain_id,
+          mailboxId: row.mailbox_id,
+          localPart: row.local_part,
+          replyTo: row.reply_to,
+          isDefaultSender: row.is_default_sender,
+        }
+      : null;
+  }
+
+  public async updateAllowedAddressPolicyForOrganization(input: {
+    organizationId: string;
+    addressId: string;
+    replyTo: string | null;
+    isDefaultSender: boolean;
+  }): Promise<AddressPolicyAddress | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const existing = await client.query<{
+        domain_id: string;
+        normalized_name: string;
+      }>({
+        text: `SELECT address.domain_id, domain.normalized_name
+               FROM allowed_recipient_addresses AS address
+               INNER JOIN domains AS domain
+                 ON domain.id = address.domain_id AND domain.organization_id = address.organization_id
+               WHERE address.organization_id = $1 AND address.id = $2
+                 AND domain.verification_status = 'verified'
+               FOR UPDATE OF address, domain`,
+        values: [input.organizationId, input.addressId],
+      });
+      const domain = existing.rows[0];
+      if (!domain) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const domainId = domain.domain_id;
+      if (!isValidReplyToForDomain(input.replyTo, domain.normalized_name)) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      if (input.isDefaultSender)
+        await client.query({
+          text: "UPDATE allowed_recipient_addresses SET is_default_sender = FALSE WHERE organization_id = $1 AND domain_id = $2",
+          values: [input.organizationId, domainId],
+        });
+      const result = await client.query<{
+        id: string;
+        organization_id: string;
+        domain_id: string;
+        mailbox_id: string;
+        local_part: string;
+        reply_to: string | null;
+        is_default_sender: boolean;
+      }>({
+        text: "UPDATE allowed_recipient_addresses SET reply_to = $3, is_default_sender = $4 WHERE organization_id = $1 AND id = $2 RETURNING id, organization_id, domain_id, mailbox_id, local_part, reply_to, is_default_sender",
+        values: [
+          input.organizationId,
+          input.addressId,
+          input.replyTo,
+          input.isDefaultSender,
+        ],
+      });
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      return row
+        ? {
+            id: row.id,
+            organizationId: row.organization_id,
+            domainId: row.domain_id,
+            mailboxId: row.mailbox_id,
+            localPart: row.local_part,
+            replyTo: row.reply_to,
+            isDefaultSender: row.is_default_sender,
+          }
+        : null;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   public async capture(input: {
     eventId: string;
     eventType: string;
@@ -762,3 +877,15 @@ export class PostgresIdentityRepository implements DomainSettingsRepository {
 }
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const isValidReplyToForDomain = (value: string | null, domain: string) => {
+  if (value === null) return true;
+  const separator = value.lastIndexOf("@");
+  return (
+    value === value.trim().toLowerCase() &&
+    separator > 0 &&
+    separator === value.indexOf("@") &&
+    value.slice(separator + 1) === domain &&
+    /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(value.slice(0, separator))
+  );
+};

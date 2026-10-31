@@ -2,16 +2,16 @@
 
 ## Slice ID
 
-S2.address-sender-policy
+S3.outbound
 
 ## Next task
 
-Sprint 2 — allowed-address sender and reply-to policy
+Sprint 3 — reliable outbound email foundation
 
 ## Acceptance criteria
 
-- Pending task selection: turn Sprint 2's default-sender and reply-to
-  requirements into a bounded, organization-scoped policy slice.
+- Pending task selection: define the smallest idempotent, queued outbound-send
+  foundation without a live provider transport.
 
 ## Test-first evidence
 

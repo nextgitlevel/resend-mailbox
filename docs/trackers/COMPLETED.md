@@ -3,6 +3,24 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-31 — allowed-address sender and reply-to policy
+
+**Outcome:** Owner-only address policy now persists normalized same-domain
+reply-to values and atomically selects at most one default sender per verified
+domain.
+
+**Test-first evidence:** focused service test initially failed because the
+policy service module did not exist.
+
+**Verification:** focused service/route tests, database-backed API suite,
+`corepack pnpm verify`, typecheck, lint, formatting, and `git diff --check`
+passed. Independent test-runner and quality review passed.
+
+**Result:** scoped repository transactions validate reply-to again at the
+persistence boundary, lock the domain for default replacement, and reject
+foreign/malformed direct calls without writes. No runtime configuration,
+secret, provider call, or deployment artifact changed.
+
 ## 2026-10-31 — provider-authoritative domain verification refresh
 
 **Outcome:** introduced a safe, provider-independent verification refresh
