@@ -6,12 +6,12 @@ S3.outbound
 
 ## Next task
 
-Sprint 3 — reliable outbound email foundation
+Sprint 3 — worker-owned Resend delivery transport
 
 ## Acceptance criteria
 
-- Pending task selection: define the smallest idempotent, queued outbound-send
-  foundation without a live provider transport.
+- Pending task selection: build a worker-owned, fixture-backed Resend dispatch
+  boundary that consumes queued sends exactly once and records safe outcomes.
 
 ## Test-first evidence
 

@@ -80,6 +80,54 @@ const createIsolatedSchema = async () => {
 };
 
 integrationTest(
+  "outbound queue is idempotent, rejects mismatched reuse, and isolates organizations",
+  async (t) => {
+    const { pool, cleanup } = await createIsolatedSchema();
+    const repository = new PostgresIdentityRepository(pool);
+    t.after(cleanup);
+    const first = await repository.bootstrapOwner({
+      userEmail: "outbound-one@example.test",
+      organizationName: "One",
+      connectionName: "One",
+      encryptedEnvelope,
+    });
+    const second = await repository.bootstrapOwner({
+      userEmail: "outbound-two@example.test",
+      organizationName: "Two",
+      connectionName: "Two",
+      encryptedEnvelope,
+    });
+    const input = {
+      organizationId: first.organizationId,
+      idempotencyKey: "same-key",
+      from: "support@example.test",
+      to: "person@example.test",
+      subject: "Hello",
+      fingerprint: "fingerprint-one",
+    };
+    const queued = await repository.queue(input);
+    const duplicate = await repository.queue(input);
+    assert.equal(queued.duplicate, false);
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(duplicate.id, queued.id);
+    await assert.rejects(
+      repository.queue({
+        ...input,
+        subject: "Changed",
+        fingerprint: "fingerprint-two",
+      }),
+      /IDEMPOTENCY_KEY_REUSED/,
+    );
+    const isolated = await repository.queue({
+      ...input,
+      organizationId: second.organizationId,
+    });
+    assert.equal(isolated.duplicate, false);
+    assert.notEqual(isolated.id, queued.id);
+  },
+);
+
+integrationTest(
   "Owner connection configuration stores an encrypted credential without its plaintext",
   async (t) => {
     const { pool, cleanup } = await createIsolatedSchema();

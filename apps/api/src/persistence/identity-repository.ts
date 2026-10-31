@@ -6,6 +6,10 @@ import type {
   AddressPolicyRepository,
 } from "../domains/address-policy-service.js";
 import type {
+  OutboundSendRepository,
+  QueuedOutboundSend,
+} from "../outbound/outbound-send-service.js";
+import type {
   AllowedAddress,
   DomainSettingsRepository,
   Mailbox,
@@ -177,6 +181,20 @@ const upStatements = [
   `CREATE UNIQUE INDEX allowed_recipient_addresses_one_default_sender_per_domain
     ON allowed_recipient_addresses (domain_id) WHERE is_default_sender`,
   `
+    CREATE TABLE outbound_sends (
+      id UUID PRIMARY KEY,
+      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      idempotency_key TEXT NOT NULL CHECK (char_length(idempotency_key) BETWEEN 1 AND 200),
+      sender TEXT NOT NULL,
+      recipient TEXT NOT NULL,
+      subject TEXT NOT NULL CHECK (char_length(subject) BETWEEN 1 AND 998),
+      fingerprint TEXT NOT NULL CHECK (char_length(fingerprint) > 0),
+      status TEXT NOT NULL CHECK (status = 'queued'),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (organization_id, idempotency_key)
+    )
+  `,
+  `
     CREATE TABLE sessions (
       id UUID PRIMARY KEY,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -208,6 +226,7 @@ const downStatements = [
   "DROP TABLE IF EXISTS instance_bootstrap",
   "DROP TABLE IF EXISTS sessions",
   "DROP TABLE IF EXISTS inbound_webhook_receipts",
+  "DROP TABLE IF EXISTS outbound_sends",
   "DROP TABLE IF EXISTS allowed_recipient_addresses",
   "DROP TABLE IF EXISTS domains",
   "DROP TABLE IF EXISTS mailboxes",
@@ -231,7 +250,10 @@ export const revertIdentitySchema = async (database: Queryable) => {
 };
 
 export class PostgresIdentityRepository
-  implements DomainSettingsRepository, AddressPolicyRepository
+  implements
+    DomainSettingsRepository,
+    AddressPolicyRepository,
+    OutboundSendRepository
 {
   public constructor(private readonly pool: Pool) {}
 
@@ -813,6 +835,84 @@ export class PostgresIdentityRepository
     } finally {
       client.release();
     }
+  }
+
+  public async isAllowedSender(input: {
+    organizationId: string;
+    from: string;
+  }): Promise<boolean> {
+    const result = await this.pool.query({
+      text: `SELECT 1 FROM allowed_recipient_addresses AS address
+             INNER JOIN domains AS domain ON domain.id = address.domain_id
+               AND domain.organization_id = address.organization_id
+             WHERE address.organization_id = $1
+               AND domain.verification_status = 'verified'
+               AND address.local_part || '@' || domain.normalized_name = $2`,
+      values: [input.organizationId, input.from],
+    });
+    return result.rowCount === 1;
+  }
+
+  public async queue(
+    input: Omit<QueuedOutboundSend, "id" | "status" | "duplicate">,
+  ): Promise<QueuedOutboundSend> {
+    const id = randomUUID();
+    type OutboundSendRow = {
+      id: string;
+      organization_id: string;
+      idempotency_key: string;
+      sender: string;
+      recipient: string;
+      subject: string;
+      fingerprint: string;
+    };
+    const inserted = await this.pool.query<OutboundSendRow>({
+      text: `INSERT INTO outbound_sends (id, organization_id, idempotency_key, sender, recipient, subject, fingerprint, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued')
+             ON CONFLICT (organization_id, idempotency_key) DO NOTHING
+             RETURNING id, organization_id, idempotency_key, sender, recipient, subject, fingerprint`,
+      values: [
+        id,
+        input.organizationId,
+        input.idempotencyKey,
+        input.from,
+        input.to,
+        input.subject,
+        input.fingerprint,
+      ],
+    });
+    const row = inserted.rows[0];
+    if (row)
+      return {
+        id: row.id,
+        organizationId: row.organization_id,
+        idempotencyKey: row.idempotency_key,
+        from: row.sender,
+        to: row.recipient,
+        subject: row.subject,
+        fingerprint: row.fingerprint,
+        status: "queued",
+        duplicate: false,
+      };
+    const existing = await this.pool.query<OutboundSendRow>({
+      text: "SELECT id, organization_id, idempotency_key, sender, recipient, subject, fingerprint FROM outbound_sends WHERE organization_id = $1 AND idempotency_key = $2",
+      values: [input.organizationId, input.idempotencyKey],
+    });
+    const existingRow = existing.rows[0];
+    if (!existingRow) throw new Error("OUTBOUND_SEND_QUEUE_FAILED");
+    if (existingRow.fingerprint !== input.fingerprint)
+      throw new Error("IDEMPOTENCY_KEY_REUSED");
+    return {
+      id: existingRow.id,
+      organizationId: existingRow.organization_id,
+      idempotencyKey: existingRow.idempotency_key,
+      from: existingRow.sender,
+      to: existingRow.recipient,
+      subject: existingRow.subject,
+      fingerprint: existingRow.fingerprint,
+      status: "queued",
+      duplicate: true,
+    };
   }
 
   public async capture(input: {

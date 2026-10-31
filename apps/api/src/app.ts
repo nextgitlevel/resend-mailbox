@@ -7,6 +7,7 @@ import { AddressPolicyService } from "./domains/address-policy-service.js";
 import { DomainSettingsService } from "./domains/domain-settings-service.js";
 import { DomainVerificationService } from "./domains/domain-verification-service.js";
 import { WebhookReceiptService } from "./inbound/webhook-receipt-service.js";
+import { OutboundSendService } from "./outbound/outbound-send-service.js";
 import { ConnectionSettingsService } from "./settings/connection-settings-service.js";
 import { ConnectionValidationService } from "./settings/connection-validation-service.js";
 
@@ -19,6 +20,7 @@ export interface AppOptions {
   domainVerificationService?: DomainVerificationService;
   resendWebhookSecret?: string;
   webhookReceiptService?: WebhookReceiptService;
+  outboundSendService?: OutboundSendService;
   secureCookies?: boolean;
 }
 
@@ -452,6 +454,42 @@ export const buildApp = (options: AppOptions = {}) => {
               ? 404
               : 400,
         )
+        .send({ error: code });
+    }
+  });
+
+  app.post("/v1/outbound-sends", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.outboundSendService)
+      return reply.code(503).send({ error: "OUTBOUND_SENDS_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const body = request.body;
+    if (
+      !isRecord(body) ||
+      typeof body.idempotencyKey !== "string" ||
+      typeof body.from !== "string" ||
+      typeof body.to !== "string" ||
+      typeof body.subject !== "string"
+    )
+      return reply.code(400).send({ error: "INVALID_OUTBOUND_SEND_INPUT" });
+    try {
+      const send = await options.outboundSendService.queue({
+        account,
+        idempotencyKey: body.idempotencyKey,
+        from: body.from,
+        to: body.to,
+        subject: body.subject,
+      });
+      return reply.code(send.duplicate ? 200 : 201).send({ send });
+    } catch (error) {
+      const code = errorMessage(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
         .send({ error: code });
     }
   });

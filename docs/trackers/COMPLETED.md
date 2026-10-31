@@ -3,6 +3,24 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-31 — idempotent outbound queue foundation
+
+**Outcome:** added an Owner-only, organization-scoped durable outbound queue
+with canonical payload fingerprints; queue creation deliberately performs no
+network/provider action.
+
+**Test-first evidence:** focused outbound service test first failed because
+the service module was absent.
+
+**Verification:** focused tests, PostgreSQL integration proof for first,
+duplicate, mismatch, and cross-organization keys, `corepack pnpm verify`,
+typecheck, lint, format, and `git diff --check` passed with independent review.
+
+**Result:** equivalent retries return the same queued send, changed payloads
+reuse of the key are rejected, and sender authorization is evaluated before
+persistence. Live Resend dispatch remains a worker slice; no secret, provider
+call, runtime configuration, or deployment artifact changed.
+
 ## 2026-10-31 — allowed-address sender and reply-to policy
 
 **Outcome:** Owner-only address policy now persists normalized same-domain

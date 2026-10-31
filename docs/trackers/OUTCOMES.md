@@ -10,6 +10,16 @@ intended outcome. Each entry must include:
   automated proof is insufficient.
 - Known limitations, follow-up work, and rollback notes.
 
+## 2026-10-31 — idempotent outbound queue foundation
+
+- **Proof:** queue service fetch guard proves no network action; persistence
+  stores and compares canonical fingerprints under organization-scoped
+  idempotency uniqueness. Integration proof covers duplicate, mismatch,
+  organization isolation, and rollback.
+- **Operational impact:** none. No live service reads this development source;
+  no runtime configuration, credential, provider state, or deployment artifact
+  changed.
+
 ## 2026-10-31 — allowed-address sender and reply-to policy
 
 - **Proof:** strict parser and repository-level validation enforce an exact

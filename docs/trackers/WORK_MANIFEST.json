@@ -104,7 +104,7 @@
     },
     {
       "id": "S3.outbound",
-      "status": "pending",
+      "status": "active",
       "depends_on": ["S2.domains-routing"],
       "plan_reference": "Sprint 3 — reliable outbound email"
     },

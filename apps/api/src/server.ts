@@ -5,6 +5,7 @@ import { AddressPolicyService } from "./domains/address-policy-service.js";
 import { buildApp } from "./app.js";
 import { DomainSettingsService } from "./domains/domain-settings-service.js";
 import { WebhookReceiptService } from "./inbound/webhook-receipt-service.js";
+import { OutboundSendService } from "./outbound/outbound-send-service.js";
 import { PostgresIdentityRepository } from "./persistence/identity-repository.js";
 import { ConnectionSettingsService } from "./settings/connection-settings-service.js";
 import { CredentialEncryptionService } from "./settings/credential-encryption.js";
@@ -43,6 +44,9 @@ const app = buildApp({
   resendWebhookSecret: process.env.RESEND_WEBHOOK_SECRET,
   webhookReceiptService: repository
     ? new WebhookReceiptService(repository)
+    : undefined,
+  outboundSendService: repository
+    ? new OutboundSendService(repository)
     : undefined,
 });
 const port = Number(process.env.PORT ?? 3001);
