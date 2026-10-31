@@ -379,6 +379,29 @@ export class PostgresIdentityRepository
     };
   }
 
+  public async updateConnectionSecretEnvelope(input: {
+    organizationId: string;
+    connectionId: string;
+    encryptedEnvelope: EncryptedSecretEnvelope;
+  }): Promise<RedactedConnection | null> {
+    const result = await this.pool.query({
+      text: `UPDATE connection_secret_envelopes SET ciphertext = $3, nonce = $4,
+               wrapped_dek = $5, key_version = $6, algorithm = $7
+             WHERE organization_id = $1 AND connection_id = $2`,
+      values: [
+        input.organizationId,
+        input.connectionId,
+        input.encryptedEnvelope.ciphertext,
+        input.encryptedEnvelope.nonce,
+        input.encryptedEnvelope.wrappedDek,
+        input.encryptedEnvelope.keyVersion,
+        input.encryptedEnvelope.algorithm,
+      ],
+    });
+    if (result.rowCount !== 1) return null;
+    return this.findConnectionForOrganization(input);
+  }
+
   public async hasOwner(): Promise<boolean> {
     const result = await this.pool.query({
       text: "SELECT 1 FROM instance_bootstrap LIMIT 1",
@@ -573,6 +596,28 @@ export class PostgresIdentityRepository
     };
   }
 
+  public async listConnectionsForOrganization(
+    organizationId: string,
+  ): Promise<RedactedConnection[]> {
+    const result = await this.pool.query<ConnectionRow>({
+      text: `SELECT connection.id, connection.organization_id, connection.name,
+               envelope.id IS NOT NULL AS secret_configured, envelope.key_version
+             FROM resend_connections AS connection
+             LEFT JOIN connection_secret_envelopes AS envelope
+               ON envelope.connection_id = connection.id
+             WHERE connection.organization_id = $1
+             ORDER BY connection.created_at, connection.name`,
+      values: [organizationId],
+    });
+    return result.rows.map((row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+      name: row.name,
+      secretConfigured: row.secret_configured,
+      keyVersion: row.key_version,
+    }));
+  }
+
   public async createMailbox(input: {
     organizationId: string;
     name: string;
@@ -583,6 +628,24 @@ export class PostgresIdentityRepository
       values: [id, input.organizationId, input.name],
     });
     return { id, organizationId: input.organizationId, name: input.name };
+  }
+
+  public async listMailboxesForOrganization(
+    organizationId: string,
+  ): Promise<Mailbox[]> {
+    const result = await this.pool.query<{
+      id: string;
+      organization_id: string;
+      name: string;
+    }>({
+      text: "SELECT id, organization_id, name FROM mailboxes WHERE organization_id = $1 ORDER BY name",
+      values: [organizationId],
+    });
+    return result.rows.map((row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+      name: row.name,
+    }));
   }
 
   public async findMailboxForOrganization(input: {
@@ -672,6 +735,36 @@ export class PostgresIdentityRepository
     };
   }
 
+  public async listDomainsForOrganization(
+    organizationId: string,
+  ): Promise<RedactedDomain[]> {
+    const result = await this.pool.query<{
+      id: string;
+      organization_id: string;
+      connection_id: string;
+      normalized_name: string;
+      verification_status: "pending" | "verified" | "failed";
+      fallback_kind: "catch_all" | "quarantine" | "discard";
+      fallback_mailbox_id: string | null;
+    }>({
+      text: `SELECT id, organization_id, connection_id, normalized_name,
+               verification_status, fallback_kind, fallback_mailbox_id
+             FROM domains WHERE organization_id = $1 ORDER BY normalized_name`,
+      values: [organizationId],
+    });
+    return result.rows.map((row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+      connectionId: row.connection_id,
+      name: row.normalized_name,
+      verificationStatus: row.verification_status,
+      fallback:
+        row.fallback_kind === "catch_all"
+          ? { kind: "catch_all", mailboxId: row.fallback_mailbox_id as string }
+          : { kind: row.fallback_kind },
+    }));
+  }
+
   public async updateDomainVerificationStatusForOrganization(input: {
     organizationId: string;
     domainId: string;
@@ -746,6 +839,30 @@ export class PostgresIdentityRepository
     }
 
     return { id, ...input };
+  }
+
+  public async listAllowedAddressesForOrganization(
+    organizationId: string,
+  ): Promise<AllowedAddress[]> {
+    const result = await this.pool.query<{
+      id: string;
+      organization_id: string;
+      domain_id: string;
+      mailbox_id: string;
+      local_part: string;
+    }>({
+      text: `SELECT id, organization_id, domain_id, mailbox_id, local_part
+             FROM allowed_recipient_addresses WHERE organization_id = $1
+             ORDER BY local_part`,
+      values: [organizationId],
+    });
+    return result.rows.map((row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+      domainId: row.domain_id,
+      mailboxId: row.mailbox_id,
+      localPart: row.local_part,
+    }));
   }
 
   public async findAllowedAddressForOrganization(input: {

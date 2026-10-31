@@ -5,6 +5,7 @@ import {
   DeterministicResendValidationClient,
   FixtureResendValidationTransport,
   FixtureResendValidationClient,
+  ResendValidationHttpTransport,
   type ConnectionValidationStatus,
   resendValidationFixtures,
 } from "../src/settings/resend-validation-client.js";
@@ -65,4 +66,39 @@ test("fixture validation treats an unmapped credential as invalid without exposi
 
   assert.equal(result, "invalid_credentials");
   assert.notEqual(result, "unknown_fixture_credential");
+});
+
+test("live validation probes Resend without returning the API credential", async () => {
+  const credential = ["re", "secret", "fixture"].join("_");
+  let captured: RequestInit | undefined;
+  const transport = new ResendValidationHttpTransport(async (_input, init) => {
+    captured = init;
+    return Response.json({ object: "list", data: [], has_more: false });
+  });
+  const result = await new DeterministicResendValidationClient(
+    transport,
+  ).validate(credential);
+  assert.equal(result, "connected");
+  assert.equal(
+    new Headers(captured?.headers).get("Authorization"),
+    `Bearer ${credential}`,
+  );
+  assert.notEqual(result, credential);
+});
+
+test("live validation classifies unauthorized keys and network errors safely", async () => {
+  const unauthorized = new ResendValidationHttpTransport(async () =>
+    Response.json({ message: "secret error" }, { status: 401 }),
+  );
+  const networkFailure = new ResendValidationHttpTransport(async () => {
+    throw new Error("private network details");
+  });
+  const client = new DeterministicResendValidationClient(unauthorized);
+  assert.equal(await client.validate("re_invalid"), "invalid_credentials");
+  assert.equal(
+    await new DeterministicResendValidationClient(networkFailure).validate(
+      "re_private",
+    ),
+    "unavailable",
+  );
 });

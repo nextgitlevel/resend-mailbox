@@ -40,3 +40,9 @@ as same-site. Native devices need a reachable API host
 instead of loopback. The API permits cookie credentials only for the exact
 configured browser origin. `.env.example` is the development template; it is
 not read by the live service unless explicitly copied into a local `.env`.
+
+After signing in as Owner, use **Manage Resend account and senders** to save an
+API key, create a mailbox, add a domain that already exists in the selected
+Resend account, refresh provider verification, and create an allowed address
+under a verified domain. The API encrypts the key before persistence; it is
+not returned again. Inbound mail setup and inbox display are still in progress.

@@ -1,5 +1,32 @@
 # Outcomes and proof
 
+## 2026-10-31 — Owner Resend account and sender setup
+
+- **Commit:** `be20535`.
+- **Outcome:** authenticated Owners can manage encrypted Resend connections,
+  validate or replace credentials, create mailboxes, attach existing Resend
+  domains, refresh provider verification, and create an allowed address only
+  on a verified domain. The Expo client provides the corresponding responsive
+  setup flow.
+- **Evidence:** live domain lookup and key validation use injected HTTP
+  transports; tests verify safe status mapping and key nonexposure. Owner-only
+  route and client API tests pass.
+- **Verification:** `corepack pnpm verify` passed: API 63 passed / 8 database
+  integrations skipped; client 4 passed. API and client typechecks passed.
+  PostgreSQL integration cases remain unrun because Docker daemon access is
+  denied.
+- **Authoritative paths:** setup routes are `apps/api/src/app.ts`; provider
+  validation is in `apps/api/src/settings/resend-validation-client.ts` and
+  `apps/api/src/domains/resend-domain-verification-client.ts`; credential
+  encryption and organization-scoped persistence remain in their settings and
+  persistence modules. Client setup is `apps/client/src/app/index.tsx` and
+  `apps/client/src/lib/mail-api.ts`. These are source paths with no runtime
+  mirrors; no live service reads them.
+- **Operational impact:** no runtime configuration, secret, systemd unit,
+  certificate, deployment artifact, or external Resend state changed.
+- **Follow-up:** durable inbound event processing, message retrieval, and
+  inbox presentation remain part of the active send/receive task.
+
 ## 2026-10-31 — authenticated plain-text compose and send status UI
 
 - **Commit:** `8b9d270`.

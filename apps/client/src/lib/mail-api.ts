@@ -10,6 +10,25 @@ export interface AllowedSender {
   replyTo: string | null;
 }
 
+export interface ResendConnection {
+  id: string;
+  name: string;
+  secretConfigured: boolean;
+  keyVersion: string | null;
+}
+
+export interface Mailbox {
+  id: string;
+  name: string;
+}
+
+export interface ConfiguredDomain {
+  id: string;
+  connectionId: string;
+  name: string;
+  verificationStatus: "pending" | "verified" | "failed";
+}
+
 export interface OutboundSendStatus {
   id: string;
   status: "queued" | "claimed" | "sent" | "failed";
@@ -34,6 +53,26 @@ export interface MailApi {
     bootstrapToken: string;
   }): Promise<MailAccount>;
   senders(): Promise<AllowedSender[]>;
+  connections(): Promise<ResendConnection[]>;
+  createConnection(input: {
+    name: string;
+    apiKey: string;
+  }): Promise<ResendConnection>;
+  replaceConnectionKey(
+    connectionId: string,
+    apiKey: string,
+  ): Promise<ResendConnection>;
+  validateConnection(connectionId: string): Promise<string>;
+  mailboxes(): Promise<Mailbox[]>;
+  createMailbox(name: string): Promise<Mailbox>;
+  domains(): Promise<ConfiguredDomain[]>;
+  createDomain(connectionId: string, name: string): Promise<ConfiguredDomain>;
+  refreshDomain(domainId: string): Promise<ConfiguredDomain>;
+  createAddress(
+    domainId: string,
+    mailboxId: string,
+    localPart: string,
+  ): Promise<void>;
   send(input: {
     from: string;
     to: string;
@@ -61,7 +100,7 @@ export const createMailApi = (
   const call = async <T>(
     path: string,
     input: {
-      method?: "GET" | "POST";
+      method?: "GET" | "POST" | "PUT";
       body?: unknown;
       headers?: Record<string, string>;
       allowUnauthorized?: boolean;
@@ -125,6 +164,80 @@ export const createMailApi = (
       );
       if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
       return result.senders;
+    },
+    async connections() {
+      const result = await call<{ connections: ResendConnection[] }>(
+        "/v1/connections",
+      );
+      if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
+      return result.connections;
+    },
+    async createConnection(input) {
+      const result = await call<{ connection: ResendConnection }>(
+        "/v1/connections",
+        { method: "POST", body: input },
+      );
+      if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
+      return result.connection;
+    },
+    async validateConnection(connectionId) {
+      const result = await call<{ status: string }>(
+        `/v1/connections/${encodeURIComponent(connectionId)}/validate`,
+        { method: "POST", body: {} },
+      );
+      if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
+      return result.status;
+    },
+    async replaceConnectionKey(connectionId, apiKey) {
+      const result = await call<{ connection: ResendConnection }>(
+        `/v1/connections/${encodeURIComponent(connectionId)}/credential`,
+        { method: "PUT", body: { apiKey } },
+      );
+      if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
+      return result.connection;
+    },
+    async mailboxes() {
+      const result = await call<{ mailboxes: Mailbox[] }>("/v1/mailboxes");
+      if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
+      return result.mailboxes;
+    },
+    async createMailbox(name) {
+      const result = await call<{ mailbox: Mailbox }>("/v1/mailboxes", {
+        method: "POST",
+        body: { name },
+      });
+      if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
+      return result.mailbox;
+    },
+    async domains() {
+      const result = await call<{ domains: ConfiguredDomain[] }>("/v1/domains");
+      if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
+      return result.domains;
+    },
+    async createDomain(connectionId, name) {
+      const result = await call<{ domain: ConfiguredDomain }>(
+        `/v1/connections/${encodeURIComponent(connectionId)}/domains`,
+        {
+          method: "POST",
+          body: { name, fallback: { kind: "quarantine" } },
+        },
+      );
+      if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
+      return result.domain;
+    },
+    async refreshDomain(domainId) {
+      const result = await call<{ domain: ConfiguredDomain }>(
+        `/v1/domains/${encodeURIComponent(domainId)}/verify`,
+        { method: "POST", body: {} },
+      );
+      if (!result) throw new MailApiError(0, "INVALID_API_RESPONSE");
+      return result.domain;
+    },
+    async createAddress(domainId, mailboxId, localPart) {
+      await call<{ address: unknown }>(
+        `/v1/domains/${encodeURIComponent(domainId)}/addresses`,
+        { method: "POST", body: { mailboxId, localPart } },
+      );
     },
     async send(input) {
       const result = await call<{ send: OutboundSendStatus }>(

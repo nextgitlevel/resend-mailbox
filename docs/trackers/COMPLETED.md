@@ -3,6 +3,33 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-31 — Owner Resend account and sender setup
+
+**Commit:** `be20535`.
+
+**Outcome:** Owner can configure a live Resend connection from the client,
+validate or replace its encrypted credential, create a mailbox, add a domain
+already present in Resend, refresh provider verification, and create an
+allowed sender only after the domain is verified. List APIs remain Owner-only
+and organization-scoped.
+
+**Test-first evidence:** focused domain-verification transport tests first
+failed because the live provider client module did not exist. Route, settings,
+transport, and client API tests now cover redacted reads, Owner access,
+credential validation, provider response mapping, and key nonexposure. The
+secret scanner initially flagged a realistic test fixture token; the fixture
+was rewritten compositionally so scanning can detect actual accidental keys.
+
+**Verification:** `corepack pnpm verify` passed (API: 63 passed, 8 database
+integration tests skipped; client: 4 passed). API/client typechecks passed.
+PostgreSQL integration tests could not run because the Docker daemon socket is
+inaccessible in this environment.
+
+**Operational impact:** source code and README only. No live Resend account,
+credential, runtime configuration, service, deployment artifact, or provider
+state was changed. `.env.example` remains a development template; no mirror or
+symlink was created.
+
 ## 2026-10-31 — authenticated plain-text compose and send status UI
 
 **Outcome:** the Expo client now provides owner bootstrap/sign-in, verified

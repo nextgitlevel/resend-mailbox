@@ -32,6 +32,20 @@ const createAuthService = (role: "owner" | "member" = "owner") =>
 
 const createDomainService = () =>
   new DomainSettingsService({
+    listDomainsForOrganization: async (organizationId) => [
+      {
+        id: "domain-1",
+        organizationId,
+        connectionId: "connection-1",
+        name: "example.test",
+        verificationStatus: "pending",
+        fallback: { kind: "quarantine" },
+      },
+    ],
+    listMailboxesForOrganization: async (organizationId) => [
+      { id: "mailbox-1", organizationId, name: "Primary" },
+    ],
+    listAllowedAddressesForOrganization: async () => [],
     findConnectionForOrganization: async () => ({ id: "connection-1" }),
     createDomain: async (input) => ({
       id: "domain-1",
@@ -85,6 +99,42 @@ test("domain and mailbox configuration routes require an Owner and derive organi
   });
   assert.equal(mailbox.statusCode, 201);
   assert.equal(unauthenticated.statusCode, 401);
+});
+
+test("configuration lists are Owner-only and expose only the session organization", async (t) => {
+  const app = buildApp({
+    authService: createAuthService(),
+    domainSettingsService: createDomainService(),
+  });
+  const member = buildApp({
+    authService: createAuthService("member"),
+    domainSettingsService: createDomainService(),
+  });
+  t.after(async () => Promise.all([app.close(), member.close()]));
+  const domains = await app.inject({
+    method: "GET",
+    url: "/v1/domains",
+    headers: { cookie },
+  });
+  const mailboxes = await app.inject({
+    method: "GET",
+    url: "/v1/mailboxes",
+    headers: { cookie },
+  });
+  const addresses = await app.inject({
+    method: "GET",
+    url: "/v1/addresses",
+    headers: { cookie },
+  });
+  const forbidden = await member.inject({
+    method: "GET",
+    url: "/v1/domains",
+    headers: { cookie },
+  });
+  assert.equal(domains.json().domains[0].organizationId, "organization-1");
+  assert.equal(mailboxes.json().mailboxes[0].organizationId, "organization-1");
+  assert.deepEqual(addresses.json(), { addresses: [] });
+  assert.equal(forbidden.statusCode, 403);
 });
 
 test("allowed-address configuration is Owner-only and derives its organization from the session", async (t) => {

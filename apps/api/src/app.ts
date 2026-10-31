@@ -36,7 +36,7 @@ export const buildApp = (options: AppOptions = {}) => {
     if (origin && origin === clientOrigin) {
       reply.header("Access-Control-Allow-Origin", origin);
       reply.header("Access-Control-Allow-Credentials", "true");
-      reply.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
       reply.header(
         "Access-Control-Allow-Headers",
         "Content-Type, X-Bootstrap-Token",
@@ -215,6 +215,29 @@ export const buildApp = (options: AppOptions = {}) => {
     }
   });
 
+  app.get("/v1/connections", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.connectionSettingsService)
+      return reply.code(503).send({ error: "SETTINGS_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try {
+      return {
+        connections:
+          await options.connectionSettingsService.listConnections(account),
+      };
+    } catch (error) {
+      const code = connectionErrorCode(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
+        .send({ error: code });
+    }
+  });
+
   app.get("/v1/connections/:connectionId", async (request, reply) => {
     if (!options.authService) {
       return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
@@ -259,6 +282,47 @@ export const buildApp = (options: AppOptions = {}) => {
         .send({ error: code });
     }
   });
+
+  app.put(
+    "/v1/connections/:connectionId/credential",
+    async (request, reply) => {
+      if (!options.authService)
+        return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+      if (!options.connectionSettingsService)
+        return reply.code(503).send({ error: "SETTINGS_NOT_CONFIGURED" });
+      const account = await authenticateRequest(
+        request.headers.cookie,
+        options.authService,
+      );
+      if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+      const { connectionId } = request.params as { connectionId?: string };
+      const body = request.body;
+      if (!connectionId || !isRecord(body) || typeof body.apiKey !== "string")
+        return reply.code(400).send({ error: "INVALID_CONNECTION_INPUT" });
+      try {
+        return {
+          connection: await options.connectionSettingsService.replaceCredential(
+            {
+              account,
+              connectionId,
+              apiKey: body.apiKey,
+            },
+          ),
+        };
+      } catch (error) {
+        const code = connectionErrorCode(error);
+        return reply
+          .code(
+            code === "OWNER_REQUIRED"
+              ? 403
+              : code === "CONNECTION_NOT_FOUND"
+                ? 404
+                : 400,
+          )
+          .send({ error: code });
+      }
+    },
+  );
 
   app.post("/v1/connections/:connectionId/validate", async (request, reply) => {
     if (!options.authService) {
@@ -339,6 +403,28 @@ export const buildApp = (options: AppOptions = {}) => {
     }
   });
 
+  app.get("/v1/domains", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.domainSettingsService)
+      return reply.code(503).send({ error: "DOMAINS_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try {
+      return {
+        domains: await options.domainSettingsService.listDomains(account),
+      };
+    } catch (error) {
+      const code = errorMessage(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
+        .send({ error: code });
+    }
+  });
+
   app.post("/v1/mailboxes", async (request, reply) => {
     if (!options.authService)
       return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
@@ -361,6 +447,28 @@ export const buildApp = (options: AppOptions = {}) => {
       });
     } catch (error) {
       const code = domainErrorCode(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
+        .send({ error: code });
+    }
+  });
+
+  app.get("/v1/mailboxes", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.domainSettingsService)
+      return reply.code(503).send({ error: "DOMAINS_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try {
+      return {
+        mailboxes: await options.domainSettingsService.listMailboxes(account),
+      };
+    } catch (error) {
+      const code = errorMessage(error);
       return reply
         .code(code === "OWNER_REQUIRED" ? 403 : 400)
         .send({ error: code });
@@ -397,6 +505,29 @@ export const buildApp = (options: AppOptions = {}) => {
       });
     } catch (error) {
       const code = domainErrorCode(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
+        .send({ error: code });
+    }
+  });
+
+  app.get("/v1/addresses", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.domainSettingsService)
+      return reply.code(503).send({ error: "DOMAINS_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try {
+      return {
+        addresses:
+          await options.domainSettingsService.listAllowedAddresses(account),
+      };
+    } catch (error) {
+      const code = errorMessage(error);
       return reply
         .code(code === "OWNER_REQUIRED" ? 403 : 400)
         .send({ error: code });

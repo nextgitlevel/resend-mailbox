@@ -28,6 +28,13 @@ export interface AllowedAddress {
 }
 
 export interface DomainSettingsRepository {
+  listDomainsForOrganization?(
+    organizationId: string,
+  ): Promise<RedactedDomain[]>;
+  listMailboxesForOrganization?(organizationId: string): Promise<Mailbox[]>;
+  listAllowedAddressesForOrganization?(
+    organizationId: string,
+  ): Promise<AllowedAddress[]>;
   findConnectionForOrganization(input: {
     organizationId: string;
     connectionId: string;
@@ -60,6 +67,29 @@ export interface DomainSettingsRepository {
 
 export class DomainSettingsService {
   public constructor(private readonly repository: DomainSettingsRepository) {}
+
+  public async listDomains(account: AuthAccount) {
+    requireOwner(account);
+    if (!this.repository.listDomainsForOrganization)
+      throw new Error("DOMAIN_LIST_NOT_CONFIGURED");
+    return this.repository.listDomainsForOrganization(account.organizationId);
+  }
+
+  public async listMailboxes(account: AuthAccount) {
+    requireOwner(account);
+    if (!this.repository.listMailboxesForOrganization)
+      throw new Error("MAILBOX_LIST_NOT_CONFIGURED");
+    return this.repository.listMailboxesForOrganization(account.organizationId);
+  }
+
+  public async listAllowedAddresses(account: AuthAccount) {
+    requireOwner(account);
+    if (!this.repository.listAllowedAddressesForOrganization)
+      throw new Error("ADDRESS_LIST_NOT_CONFIGURED");
+    return this.repository.listAllowedAddressesForOrganization(
+      account.organizationId,
+    );
+  }
 
   public async createDomain(input: {
     account: AuthAccount;

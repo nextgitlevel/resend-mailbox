@@ -17,9 +17,12 @@ import {
   createMailApi,
   createIdempotencyKey,
   MailApiError,
+  type ConfiguredDomain,
   type AllowedSender,
   type MailAccount,
+  type Mailbox,
   type OutboundSendStatus,
+  type ResendConnection,
 } from "@/lib/mail-api";
 
 const api = createMailApi(
@@ -35,6 +38,20 @@ export default function HomeScreen() {
   const [password, setPassword] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [bootstrapToken, setBootstrapToken] = useState("");
+  const [connections, setConnections] = useState<ResendConnection[]>([]);
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
+  const [domains, setDomains] = useState<ConfiguredDomain[]>([]);
+  const [selectedConnectionId, setSelectedConnectionId] = useState("");
+  const [selectedDomainId, setSelectedDomainId] = useState("");
+  const [selectedMailboxId, setSelectedMailboxId] = useState("");
+  const [connectionName, setConnectionName] = useState(
+    "Primary Resend account",
+  );
+  const [apiKey, setApiKey] = useState("");
+  const [mailboxName, setMailboxName] = useState("Inbox");
+  const [domainName, setDomainName] = useState("");
+  const [senderLocalPart, setSenderLocalPart] = useState("support");
+  const [showSetup, setShowSetup] = useState(false);
   const [senders, setSenders] = useState<AllowedSender[]>([]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -51,25 +68,55 @@ export default function HomeScreen() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
+  const loadWorkspace = useCallback(async () => {
+    const [
+      availableSenders,
+      availableConnections,
+      availableMailboxes,
+      availableDomains,
+    ] = await Promise.all([
+      api.senders(),
+      api.connections(),
+      api.mailboxes(),
+      api.domains(),
+    ]);
+    setSenders(availableSenders);
+    setConnections(availableConnections);
+    setMailboxes(availableMailboxes);
+    setDomains(availableDomains);
+    setFrom((selected) =>
+      availableSenders.some((sender) => sender.address === selected)
+        ? selected
+        : (availableSenders[0]?.address ?? ""),
+    );
+    setSelectedConnectionId((selected) =>
+      availableConnections.some((connection) => connection.id === selected)
+        ? selected
+        : (availableConnections[0]?.id ?? ""),
+    );
+    setSelectedMailboxId((selected) =>
+      availableMailboxes.some((mailbox) => mailbox.id === selected)
+        ? selected
+        : (availableMailboxes[0]?.id ?? ""),
+    );
+    setSelectedDomainId((selected) =>
+      availableDomains.some((domain) => domain.id === selected)
+        ? selected
+        : (availableDomains[0]?.id ?? ""),
+    );
+  }, []);
+
   const refreshSession = useCallback(async () => {
     try {
       const current = await api.session();
       setAccount(current);
-      if (current) {
-        const available = await api.senders();
-        setSenders(available);
-        setFrom((selected) =>
-          available.some((sender) => sender.address === selected)
-            ? selected
-            : (available[0]?.address ?? ""),
-        );
-      }
+      if (current) await loadWorkspace();
     } catch (error) {
       setMessage(userMessage(error));
     } finally {
       setReady(true);
     }
-  }, []);
+  }, [loadWorkspace]);
 
   useEffect(() => {
     void refreshSession();
@@ -120,12 +167,134 @@ export default function HomeScreen() {
               bootstrapToken,
             });
       setAccount(signedIn);
-      const available = await api.senders();
-      setSenders(available);
-      setFrom(available[0]?.address ?? "");
+      await loadWorkspace();
       setPassword("");
       setBootstrapToken("");
       setMessage("");
+    } catch (error) {
+      setMessage(userMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createConnection = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const connection = await api.createConnection({
+        name: connectionName,
+        apiKey,
+      });
+      const validation = await api.validateConnection(connection.id);
+      setApiKey("");
+      await loadWorkspace();
+      if (validation !== "connected") {
+        setMessage(
+          validation === "invalid_credentials"
+            ? "Resend rejected this API key. Review the key and add a new connection."
+            : "The key was saved, but Resend could not confirm it. Check the key permissions and network, then verify the domain.",
+        );
+        return;
+      }
+      setSelectedConnectionId(connection.id);
+      setMessage("Resend connection saved securely and validated.");
+    } catch (error) {
+      setMessage(userMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const replaceConnectionKey = async () => {
+    if (!selectedConnectionId) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await api.replaceConnectionKey(selectedConnectionId, apiKey);
+      const validation = await api.validateConnection(selectedConnectionId);
+      setApiKey("");
+      await loadWorkspace();
+      setMessage(
+        validation === "connected"
+          ? "Resend API key updated and validated."
+          : validation === "invalid_credentials"
+            ? "Resend rejected the replacement key. Enter a valid key and try again."
+            : "Key saved, but Resend could not confirm it. Check permissions and network.",
+      );
+    } catch (error) {
+      setMessage(userMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createMailbox = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const mailbox = await api.createMailbox(mailboxName);
+      await loadWorkspace();
+      setSelectedMailboxId(mailbox.id);
+      setMessage("Mailbox created.");
+    } catch (error) {
+      setMessage(userMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createDomain = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const domain = await api.createDomain(selectedConnectionId, domainName);
+      await loadWorkspace();
+      setSelectedDomainId(domain.id);
+      setDomainName("");
+      setMessage(
+        "Domain added. Configure it in Resend, then check its verification status here.",
+      );
+    } catch (error) {
+      setMessage(userMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyDomain = async (domainId: string) => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const domain = await api.refreshDomain(domainId);
+      await loadWorkspace();
+      setSelectedDomainId(domain.id);
+      setMessage(
+        domain.verificationStatus === "verified"
+          ? "Resend confirms this domain is verified."
+          : `Resend domain status: ${domain.verificationStatus}.`,
+      );
+    } catch (error) {
+      setMessage(userMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createSender = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      await api.createAddress(
+        selectedDomainId,
+        selectedMailboxId,
+        senderLocalPart,
+      );
+      await loadWorkspace();
+      setFrom(
+        `${senderLocalPart.trim().toLowerCase()}@${domains.find((domain) => domain.id === selectedDomainId)?.name ?? ""}`,
+      );
+      setMessage("Allowed sender address created.");
     } catch (error) {
       setMessage(userMessage(error));
     } finally {
@@ -255,6 +424,167 @@ export default function HomeScreen() {
           <ThemedText type="smallBold">{account.role.toUpperCase()}</ThemedText>
         </View>
       </View>
+
+      {senders.length > 0 && (
+        <InlineAction
+          label={
+            showSetup
+              ? "Hide account setup"
+              : "Manage Resend account and senders"
+          }
+          onPress={() => setShowSetup((visible) => !visible)}
+        />
+      )}
+      {(senders.length === 0 || showSetup) && (
+        <ThemedView type="backgroundElement" style={styles.setupCard}>
+          <ThemedText type="subtitle">Set up a sender</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Add a Resend API key, an existing Resend domain, a mailbox, and an
+            allowed address. The key is encrypted by the API and is never shown
+            again.
+          </ThemedText>
+
+          {connections.length === 0 ? (
+            <Field
+              label="Connection name"
+              value={connectionName}
+              onChangeText={setConnectionName}
+              placeholder="Primary Resend account"
+            />
+          ) : (
+            <View style={styles.fieldGroup}>
+              <ThemedText type="smallBold">Resend connection</ThemedText>
+              <View style={styles.senderList}>
+                {connections.map((connection) => (
+                  <OptionPill
+                    key={connection.id}
+                    label={connection.name}
+                    selected={selectedConnectionId === connection.id}
+                    onPress={() => setSelectedConnectionId(connection.id)}
+                  />
+                ))}
+              </View>
+            </View>
+          )}
+          <Field
+            label={
+              connections.length
+                ? "Replace API key (optional)"
+                : "Resend API key"
+            }
+            value={apiKey}
+            onChangeText={setApiKey}
+            secureTextEntry
+            autoCapitalize="none"
+            placeholder="re_…"
+          />
+          <ActionButton
+            label={
+              connections.length
+                ? "Update and verify key"
+                : "Save and verify connection"
+            }
+            busy={busy}
+            disabled={
+              !apiKey.trim() ||
+              (connections.length > 0 && !selectedConnectionId)
+            }
+            onPress={() =>
+              void (connections.length
+                ? replaceConnectionKey()
+                : createConnection())
+            }
+          />
+
+          <View style={styles.setupDivider} />
+          <ThemedText type="smallBold">Mailbox</ThemedText>
+          {mailboxes.length > 0 && (
+            <View style={styles.senderList}>
+              {mailboxes.map((mailbox) => (
+                <OptionPill
+                  key={mailbox.id}
+                  label={mailbox.name}
+                  selected={selectedMailboxId === mailbox.id}
+                  onPress={() => setSelectedMailboxId(mailbox.id)}
+                />
+              ))}
+            </View>
+          )}
+          <View style={styles.inlineFields}>
+            <Field
+              label="New mailbox name"
+              value={mailboxName}
+              onChangeText={setMailboxName}
+              placeholder="Inbox"
+              style={styles.compactInput}
+            />
+            <ActionButton
+              label="Add mailbox"
+              busy={busy}
+              disabled={!mailboxName.trim()}
+              onPress={() => void createMailbox()}
+            />
+          </View>
+
+          <View style={styles.setupDivider} />
+          <ThemedText type="smallBold">Verified domain</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Add a domain already present in your Resend account. Configure its
+            DNS in Resend, then refresh verification here.
+          </ThemedText>
+          {domains.map((domain) => (
+            <View key={domain.id} style={styles.domainRow}>
+              <OptionPill
+                label={`${domain.name} · ${domain.verificationStatus}`}
+                selected={selectedDomainId === domain.id}
+                onPress={() => setSelectedDomainId(domain.id)}
+              />
+              <InlineAction
+                label="Check"
+                onPress={() => void verifyDomain(domain.id)}
+              />
+            </View>
+          ))}
+          <View style={styles.inlineFields}>
+            <Field
+              label="Add domain"
+              value={domainName}
+              onChangeText={setDomainName}
+              placeholder="example.com"
+              autoCapitalize="none"
+              style={styles.compactInput}
+            />
+            <ActionButton
+              label="Add domain"
+              busy={busy}
+              disabled={!selectedConnectionId || !domainName.trim()}
+              onPress={() => void createDomain()}
+            />
+          </View>
+
+          {domains.find((domain) => domain.id === selectedDomainId)
+            ?.verificationStatus === "verified" &&
+            selectedMailboxId && (
+              <>
+                <View style={styles.setupDivider} />
+                <Field
+                  label="Allowed sender address"
+                  value={senderLocalPart}
+                  onChangeText={setSenderLocalPart}
+                  placeholder="support"
+                  autoCapitalize="none"
+                  maxLength={64}
+                />
+                <ActionButton
+                  label="Add sender address"
+                  busy={busy}
+                  disabled={!senderLocalPart.trim()}
+                  onPress={() => void createSender()}
+                />
+              </>
+            )}
+        </ThemedView>
+      )}
 
       <ThemedView type="backgroundElement" style={styles.composeCard}>
         <ThemedText type="subtitle">New message</ThemedText>
@@ -472,6 +802,29 @@ function InlineAction(props: { label: string; onPress: () => void }) {
   );
 }
 
+function OptionPill(props: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const palette = Colors[useColorScheme() === "dark" ? "dark" : "light"];
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: props.selected }}
+      onPress={props.onPress}
+      style={[
+        styles.senderOption,
+        {
+          borderColor: props.selected ? palette.text : palette.textSecondary,
+        },
+      ]}
+    >
+      <ThemedText type="small">{props.label}</ThemedText>
+    </Pressable>
+  );
+}
+
 function Notice(props: { message: string; tone: "error" | "info" }) {
   const dark = useColorScheme() === "dark";
   const color =
@@ -582,6 +935,26 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   composeCard: { borderRadius: 20, padding: Spacing.four, gap: Spacing.three },
+  setupCard: { borderRadius: 20, padding: Spacing.four, gap: Spacing.three },
+  setupDivider: {
+    height: 1,
+    backgroundColor: "#80808044",
+    marginVertical: Spacing.one,
+  },
+  inlineFields: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: Spacing.two,
+    flexWrap: "wrap",
+  },
+  compactInput: { minWidth: 220 },
+  domainRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: Spacing.two,
+  },
   statusCard: { borderRadius: 18, padding: Spacing.four, gap: Spacing.two },
   statusHeading: {
     flexDirection: "row",

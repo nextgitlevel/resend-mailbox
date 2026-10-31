@@ -4,10 +4,11 @@
 
 mail.send-receive-v1
 
-## Next task
+## Current task
 
-Complete Owner setup of a live Resend connection, verified domain, mailbox,
-and allowed sender through the client before beginning inbound delivery.
+Finish the full Owner setup and plain-text receive vertical slice. The send
+path is in place; setup is now available in the client. Next implement durable
+inbound event processing, message retrieval, inbox APIs, and inbox UI.
 
 ## Acceptance criteria
 
@@ -33,6 +34,19 @@ and allowed sender through the client before beginning inbound delivery.
 - The browser API client uses HttpOnly session cookies and retains the same
   idempotency key for an ambiguous network retry while the page remains open.
 - Production KMS/worker composition remains intentionally disabled.
+
+## Completed setup work
+
+- Owner settings routes and client setup now list/create/replace encrypted
+  Resend connections, validate credentials against Resend, create mailboxes,
+  add existing Resend domains, refresh provider-owned verification status, and
+  create allowed addresses only on verified domains.
+- Focused tests first failed because the live domain verification transport
+  was absent; the transport, settings routes, client API, and setup UI were
+  then implemented with fixture-only provider tests.
+- Full verification passed after formatting. API tests: 63 passed, 8 database
+  integration cases skipped; client tests: 4 passed. Docker-backed PostgreSQL
+  tests still need a runnable daemon.
 
 ## Executive scope decision
 

@@ -33,6 +33,7 @@ export class DomainVerificationService {
     if (!domain) throw new Error("DOMAIN_NOT_FOUND");
 
     const verificationStatus = await this.client.verify({
+      organizationId: input.account.organizationId,
       connectionId: domain.connectionId,
       domainName: domain.name,
     });

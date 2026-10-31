@@ -40,6 +40,15 @@ const createAuthService = (role: "owner" | "member" = "owner") => {
 const createSettingsService = () => {
   const stored: unknown[] = [];
   const repository: ConnectionSettingsRepository = {
+    listConnectionsForOrganization: async (organizationId) => [
+      {
+        id: "connection-1",
+        organizationId,
+        name: "NextLevel Resend",
+        secretConfigured: true,
+        keyVersion: "test-kek-v1",
+      },
+    ],
     createConnection: async (input) => {
       stored.push(input);
       return {
@@ -178,4 +187,34 @@ test("a non-Owner session cannot create or read connection settings", async (t) 
   assert.equal(read.statusCode, 403);
   assert.deepEqual(read.json(), { error: "OWNER_REQUIRED" });
   assert.equal(settings.stored.length, 0);
+});
+
+test("connection list is Owner-only, organization-scoped, and redacted", async (t) => {
+  const settings = createSettingsService();
+  const app = buildApp({
+    authService: createAuthService(),
+    connectionSettingsService: settings.service,
+  });
+  const member = buildApp({
+    authService: createAuthService("member"),
+    connectionSettingsService: settings.service,
+  });
+  t.after(async () => Promise.all([app.close(), member.close()]));
+  const headers = {
+    cookie: "resend_mailbox_session=opaque-session-token-for-route-test-only",
+  };
+  const response = await app.inject({
+    method: "GET",
+    url: "/v1/connections",
+    headers,
+  });
+  const forbidden = await member.inject({
+    method: "GET",
+    url: "/v1/connections",
+    headers,
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().connections[0].organizationId, "organization-1");
+  assert.equal(JSON.stringify(response.json()).includes("apiKey"), false);
+  assert.equal(forbidden.statusCode, 403);
 });

@@ -2,6 +2,7 @@ import type { DomainVerificationStatus } from "../routing/recipient-router.js";
 
 export interface DomainVerificationClient {
   verify(input: {
+    organizationId: string;
     connectionId: string;
     domainName: string;
   }): Promise<DomainVerificationStatus>;

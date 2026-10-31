@@ -77,3 +77,38 @@ test("mail API reduces network failures to a safe error code", async () => {
     return true;
   });
 });
+
+test("mail API configures a connection and verified sender through credentialed server routes", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const api = createMailApi("http://localhost:3001", async (input, init) => {
+    requests.push({ url: String(input), init });
+    if (String(input).endsWith("/v1/connections"))
+      return Response.json({
+        connection: {
+          id: "connection-1",
+          name: "Primary",
+          secretConfigured: true,
+          keyVersion: "development-v1",
+        },
+      });
+    return Response.json({
+      domain: { id: "domain-1", verificationStatus: "verified" },
+    });
+  });
+  const connection = await api.createConnection({
+    name: "Primary",
+    apiKey: "re_private_key",
+  });
+  const domain = await api.refreshDomain("domain-1");
+  assert.equal(connection.secretConfigured, true);
+  assert.equal(JSON.stringify(connection).includes("re_private_key"), false);
+  assert.equal(domain.verificationStatus, "verified");
+  assert.equal(
+    requests.every((request) => request.init?.credentials === "include"),
+    true,
+  );
+  assert.equal(
+    JSON.parse(String(requests[0]?.init?.body)).apiKey,
+    "re_private_key",
+  );
+});

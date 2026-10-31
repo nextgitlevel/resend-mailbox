@@ -4,12 +4,19 @@ import { AuthService } from "./auth/auth-service.js";
 import { AddressPolicyService } from "./domains/address-policy-service.js";
 import { buildApp } from "./app.js";
 import { DomainSettingsService } from "./domains/domain-settings-service.js";
+import { DomainVerificationService } from "./domains/domain-verification-service.js";
+import { ResendDomainVerificationClient } from "./domains/resend-domain-verification-client.js";
 import { WebhookReceiptService } from "./inbound/webhook-receipt-service.js";
 import { OutboundSendService } from "./outbound/outbound-send-service.js";
 import { PostgresIdentityRepository } from "./persistence/identity-repository.js";
 import { ConnectionSettingsService } from "./settings/connection-settings-service.js";
+import { ConnectionValidationService } from "./settings/connection-validation-service.js";
 import { CredentialEncryptionService } from "./settings/credential-encryption.js";
 import { DevelopmentKeyManagementProvider } from "./settings/development-key-management.js";
+import {
+  DeterministicResendValidationClient,
+  ResendValidationHttpTransport,
+} from "./settings/resend-validation-client.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const pool = databaseUrl
@@ -22,6 +29,9 @@ const keyManagement =
       )
     : undefined;
 const repository = pool ? new PostgresIdentityRepository(pool) : undefined;
+const credentialEncryption = keyManagement
+  ? new CredentialEncryptionService(keyManagement)
+  : undefined;
 const app = buildApp({
   authService: repository
     ? new AuthService(repository, {
@@ -32,15 +42,29 @@ const app = buildApp({
     ? new AddressPolicyService(repository)
     : undefined,
   connectionSettingsService:
-    repository && keyManagement
-      ? new ConnectionSettingsService(
+    repository && credentialEncryption
+      ? new ConnectionSettingsService(repository, credentialEncryption)
+      : undefined,
+  connectionValidationService:
+    repository && credentialEncryption
+      ? new ConnectionValidationService(
           repository,
-          new CredentialEncryptionService(keyManagement),
+          credentialEncryption,
+          new DeterministicResendValidationClient(
+            new ResendValidationHttpTransport(),
+          ),
         )
       : undefined,
   domainSettingsService: repository
     ? new DomainSettingsService(repository)
     : undefined,
+  domainVerificationService:
+    repository && credentialEncryption
+      ? new DomainVerificationService(
+          repository,
+          new ResendDomainVerificationClient(repository, credentialEncryption),
+        )
+      : undefined,
   resendWebhookSecret: process.env.RESEND_WEBHOOK_SECRET,
   webhookReceiptService: repository
     ? new WebhookReceiptService(repository)

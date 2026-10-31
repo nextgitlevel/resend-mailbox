@@ -44,6 +44,30 @@ export class DeterministicResendValidationClient implements ResendValidationClie
   }
 }
 
+/** Checks a credential against Resend's authenticated domain-list endpoint. */
+export class ResendValidationHttpTransport implements ResendValidationTransport {
+  public constructor(private readonly request: typeof fetch = fetch) {}
+
+  public async probe(credential: string): Promise<ResendValidationProbeResult> {
+    let response: Response;
+    try {
+      response = await this.request("https://api.resend.com/domains?limit=1", {
+        headers: { Authorization: `Bearer ${credential}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch {
+      return resendValidationFixtures.transientProviderFailure;
+    }
+    if (response.status === 401)
+      return { kind: "http_error", status: response.status };
+    if (!response.ok) return resendValidationFixtures.transientProviderFailure;
+    const payload: unknown = await response.json().catch(() => null);
+    return isDomainList(payload)
+      ? resendValidationFixtures.successful
+      : resendValidationFixtures.transientProviderFailure;
+  }
+}
+
 /** Deterministic transport fixture; it never performs network I/O. */
 export class FixtureResendValidationTransport implements ResendValidationTransport {
   public constructor(
@@ -65,3 +89,9 @@ export class FixtureResendValidationClient extends DeterministicResendValidation
     super(new FixtureResendValidationTransport(outcomes));
   }
 }
+
+const isDomainList = (value: unknown): value is { data: unknown[] } =>
+  typeof value === "object" &&
+  value !== null &&
+  "data" in value &&
+  Array.isArray(value.data);
