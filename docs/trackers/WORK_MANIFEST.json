@@ -66,8 +66,25 @@
     {
       "id": "S2.domains-routing",
       "status": "pending",
-      "depends_on": ["S1.validation-fixtures"],
+      "depends_on": ["S2.domain-address-persistence"],
       "plan_reference": "Sprint 2 — domains, addresses, and routing policy"
+    },
+    {
+      "id": "S2.routing-foundation",
+      "status": "completed",
+      "depends_on": ["S1.validation-fixtures"],
+      "plan_reference": "Sprint 2: deterministic recipient policy from ADRs 0001 and 0002",
+      "evidence": {
+        "commit": "PENDING",
+        "tests": ["apps/api/test/recipient-routing.test.ts"],
+        "verification": "corepack pnpm verify"
+      }
+    },
+    {
+      "id": "S2.domain-address-persistence",
+      "status": "active",
+      "depends_on": ["S2.routing-foundation"],
+      "plan_reference": "Sprint 2: domain setup/verification status and allowed-recipient mailbox assignment"
     },
     {
       "id": "S3.outbound",

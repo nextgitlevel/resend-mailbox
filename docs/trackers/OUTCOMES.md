@@ -10,6 +10,25 @@ intended outcome. Each entry must include:
   automated proof is insufficient.
 - Known limitations, follow-up work, and rollback notes.
 
+## 2026-10-31 — deterministic recipient-routing foundation
+
+- **Intended outcome:** apply the accepted organization/domain and inbound
+  routing decisions deterministically before provider integration.
+- **Proof:** the test first failed for the absent router; its four cases pass
+  for normalized assigned addresses, same local parts on separate domains,
+  explicit catch-all/quarantine/discard, and rejection of unverified, foreign,
+  malformed, and unknown-domain recipients. `corepack pnpm verify` and
+  `git diff --check` passed.
+- **Authoritative application paths:** routing behavior is
+  `apps/api/src/routing/recipient-router.ts`; behavioral proof is
+  `apps/api/test/recipient-routing.test.ts`. Neither path is configured as a
+  running service or deployment input.
+- **Limitations:** this is a pure policy component. Domain/address persistence,
+  configuration routes, provider verification, and webhook integration remain
+  pending in their own slices.
+- **Operational impact:** no runtime configuration, secret, provider state,
+  deployment artifact, or production/staging service changed.
+
 ## 2026-10-28 — repository operating foundation
 
 - **Intended outcome:** make future work test-first, auditable, and independent

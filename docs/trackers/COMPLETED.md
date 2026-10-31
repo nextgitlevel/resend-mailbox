@@ -3,6 +3,25 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-31 — deterministic recipient-routing foundation
+
+**Outcome:** added the provider-independent routing policy required by ADRs
+0001 and 0002, without accepting inbound mail or calling Resend.
+
+**Acceptance criteria met:** verified, organization-scoped domains route a
+normalized explicit address to exactly one mailbox. Unknown addresses follow
+only the configured catch-all, quarantine, or discard policy. Unverified,
+foreign, malformed, and unknown-domain recipients are rejected; no mailbox is
+created implicitly.
+
+**Test-first evidence:** the focused routing test initially failed because
+`recipient-router` did not exist, then passed its four behavior cases.
+
+**Verification:** `corepack pnpm verify` and `git diff --check` passed.
+
+**Result:** passed. Domain persistence, configuration APIs, provider
+verification, inbound webhook processing, and client UI remain separate work.
+
 ## 2026-10-30 — Owner-only on-demand connection validation
 
 **Outcome:** added a redacted, fixture-backed validation endpoint for an
