@@ -286,3 +286,66 @@ integrationTest(
     );
   },
 );
+
+integrationTest(
+  "domain persistence normalizes global domain ownership and scopes mailboxes and addresses to an organization",
+  async (t) => {
+    const { pool, cleanup } = await createIsolatedSchema();
+    const repository = new PostgresIdentityRepository(pool);
+    t.after(cleanup);
+
+    const first = await repository.bootstrapOwner({
+      userEmail: "owner-one@example.test",
+      organizationName: "First organization",
+      connectionName: "First Resend account",
+      encryptedEnvelope,
+    });
+    const second = await repository.bootstrapOwner({
+      userEmail: "owner-two@example.test",
+      organizationName: "Second organization",
+      connectionName: "Second Resend account",
+      encryptedEnvelope,
+    });
+    const mailbox = await repository.createMailbox({
+      organizationId: first.organizationId,
+      name: "Primary inbox",
+    });
+    const domain = await repository.createDomain({
+      organizationId: first.organizationId,
+      connectionId: first.connectionId,
+      name: "nextlevelmaintenance.com",
+      fallback: { kind: "quarantine" },
+    });
+    const address = await repository.createAllowedAddress({
+      organizationId: first.organizationId,
+      domainId: domain.id,
+      mailboxId: mailbox.id,
+      localPart: "marcus",
+    });
+
+    assert.equal(domain.verificationStatus, "pending");
+    assert.deepEqual(address, {
+      id: address.id,
+      organizationId: first.organizationId,
+      domainId: domain.id,
+      mailboxId: mailbox.id,
+      localPart: "marcus",
+    });
+    assert.equal(
+      await repository.findDomainForOrganization({
+        organizationId: second.organizationId,
+        domainId: domain.id,
+      }),
+      null,
+    );
+    await assert.rejects(
+      repository.createDomain({
+        organizationId: second.organizationId,
+        connectionId: second.connectionId,
+        name: "NEXTLEVELMAINTENANCE.COM",
+        fallback: { kind: "discard" },
+      }),
+      /duplicate key/,
+    );
+  },
+);
