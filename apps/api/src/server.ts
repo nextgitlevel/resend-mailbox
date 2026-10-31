@@ -31,6 +31,7 @@ const app = buildApp({
           new CredentialEncryptionService(keyManagement),
         )
       : undefined,
+  resendWebhookSecret: process.env.RESEND_WEBHOOK_SECRET,
 });
 const port = Number(process.env.PORT ?? 3001);
 

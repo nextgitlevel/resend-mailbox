@@ -1,3 +1,5 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { Transform } from "node:stream";
 import Fastify from "fastify";
 
 import { AuthService } from "./auth/auth-service.js";
@@ -10,6 +12,7 @@ export interface AppOptions {
   connectionSettingsService?: ConnectionSettingsService;
   connectionValidationService?: ConnectionValidationService;
   domainSettingsService?: DomainSettingsService;
+  resendWebhookSecret?: string;
   secureCookies?: boolean;
 }
 
@@ -18,10 +21,49 @@ export const buildApp = (options: AppOptions = {}) => {
   const secureCookies =
     options.secureCookies ?? process.env.NODE_ENV === "production";
 
+  app.addHook("preParsing", (request, _reply, payload, done) => {
+    const chunks: Buffer[] = [];
+    const capture = new Transform({
+      transform(chunk, _encoding, callback) {
+        chunks.push(Buffer.from(chunk));
+        callback(null, chunk);
+      },
+      flush(callback) {
+        (request as typeof request & { rawBody?: Buffer }).rawBody =
+          Buffer.concat(chunks);
+        callback();
+      },
+    });
+    done(null, payload.pipe(capture));
+  });
+
   app.get("/health", async () => ({
     status: "ok",
     service: "resend-mailbox-api",
   }));
+
+  app.post("/v1/webhooks/resend", async (request, reply) => {
+    if (!options.resendWebhookSecret) {
+      return reply.code(503).send({ error: "WEBHOOK_NOT_CONFIGURED" });
+    }
+    const rawBody = (request as typeof request & { rawBody?: Buffer }).rawBody;
+    const id = readHeaderValue(request.headers["svix-id"]);
+    const timestamp = readHeaderValue(request.headers["svix-timestamp"]);
+    const signature = readHeaderValue(request.headers["svix-signature"]);
+    if (
+      !rawBody ||
+      !verifyResendWebhook({
+        id,
+        timestamp,
+        signature,
+        rawBody,
+        secret: options.resendWebhookSecret,
+      })
+    ) {
+      return reply.code(400).send({ error: "INVALID_WEBHOOK_SIGNATURE" });
+    }
+    return reply.code(202).send({ received: true });
+  });
 
   app.post("/v1/bootstrap", async (request, reply) => {
     if (!options.authService) {
@@ -445,6 +487,37 @@ const domainErrorCode = (error: unknown) => {
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "UNKNOWN_ERROR";
+
+const verifyResendWebhook = (input: {
+  id: string;
+  timestamp: string;
+  signature: string;
+  rawBody: Buffer;
+  secret: string;
+}) => {
+  if (
+    !input.id ||
+    !input.timestamp ||
+    !input.signature ||
+    !input.secret.startsWith("whsec_")
+  )
+    return false;
+  const secret = Buffer.from(input.secret.slice("whsec_".length), "base64");
+  if (secret.length === 0) return false;
+  const expected = createHmac("sha256", secret)
+    .update(`${input.id}.${input.timestamp}.${input.rawBody.toString("utf8")}`)
+    .digest("base64");
+  return input.signature.split(" ").some((value) => {
+    const [, candidate] = value.split(",", 2);
+    const encoded = candidate ?? "";
+    const supplied = Buffer.from(encoded);
+    const calculated = Buffer.from(expected);
+    return (
+      supplied.length === calculated.length &&
+      timingSafeEqual(supplied, calculated)
+    );
+  });
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
