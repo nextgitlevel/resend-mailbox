@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "source": ["docs/PLAN.md", "docs/trackers/COMPLETED.md", "git history"],
+  "items": [
+    {
+      "id": "S0.foundation",
+      "status": "completed",
+      "evidence": { "commit": "76e8b33", "tracker": "Sprint 0 scaffold" }
+    },
+    {
+      "id": "S0.docker-dev",
+      "status": "completed",
+      "evidence": {
+        "commit": "42e7917",
+        "tracker": "Docker development-runtime validation"
+      }
+    },
+    {
+      "id": "S1.architecture",
+      "status": "completed",
+      "evidence": {
+        "commit": "8676f00",
+        "tracker": "Sprint 1 architecture decisions"
+      }
+    },
+    {
+      "id": "S1.identity",
+      "status": "completed",
+      "evidence": {
+        "commit": "52337ca",
+        "tracker": "Sprint 1 identity persistence foundation"
+      }
+    },
+    {
+      "id": "S1.owner-auth",
+      "status": "completed",
+      "evidence": {
+        "commit": "ba1d16f",
+        "tracker": "Sprint 1 Owner authentication and sessions"
+      }
+    },
+    {
+      "id": "S1.encrypted-settings",
+      "status": "completed",
+      "evidence": {
+        "commit": "547b052",
+        "tracker": "encrypted Owner connection settings"
+      }
+    },
+    {
+      "id": "S1.validation-fixtures",
+      "status": "completed",
+      "depends_on": ["S1.encrypted-settings"],
+      "plan_reference": "Sprint 1: Settings UI for Resend connections; validation without exposing stored keys.",
+      "evidence": {
+        "commits": ["d541e54", "a2a5bef"],
+        "tracker": "2026-10-30 deterministic Resend connection-validation contract and Owner-only on-demand connection validation"
+      }
+    },
+    {
+      "id": "S1.device-sessions",
+      "status": "unresolved",
+      "plan_reference": "Sprint 1: Account/device session management.",
+      "reason": "Plan requirement is approved but has no bounded acceptance criteria or implementation evidence."
+    },
+    {
+      "id": "S2.domains-routing",
+      "status": "pending",
+      "depends_on": ["S1.validation-fixtures"],
+      "plan_reference": "Sprint 2 — domains, addresses, and routing policy"
+    },
+    {
+      "id": "S3.outbound",
+      "status": "pending",
+      "depends_on": ["S2.domains-routing"],
+      "plan_reference": "Sprint 3 — reliable outbound email"
+    },
+    {
+      "id": "S4.inbound",
+      "status": "pending",
+      "depends_on": ["S2.domains-routing"],
+      "plan_reference": "Sprint 4 — inbound email and attachments"
+    },
+    {
+      "id": "S5.client",
+      "status": "pending",
+      "depends_on": ["S3.outbound", "S4.inbound"],
+      "plan_reference": "Sprint 5 — client experience"
+    },
+    {
+      "id": "S6.release",
+      "status": "pending",
+      "depends_on": ["S5.client"],
+      "plan_reference": "Sprint 6 — multi-user, operations, and public release"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
 # Active work
 
-No active implementation task. Select and record the next bounded slice before
-changing application code.
+No active implementation task. The supervisor must select the next eligible
+manifest slice before changing application code.
