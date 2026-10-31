@@ -19,7 +19,10 @@ test("Owner queues an idempotent normalized outbound send without a provider cal
   try {
     const records: unknown[] = [];
     const service = new OutboundSendService({
-      isAllowedSender: async () => true,
+      isAllowedSender: async () => ({
+        connectionId: "connection-1",
+        replyTo: null,
+      }),
       queue: async (input) => {
         records.push(input);
         return {
@@ -36,6 +39,7 @@ test("Owner queues an idempotent normalized outbound send without a provider cal
       from: "Support@Example.Test",
       to: "Recipient@Example.Test",
       subject: "Hello",
+      text: "Body",
     });
     assert.equal(first.status, "queued");
     assert.equal(first.from, "support@example.test");
@@ -48,7 +52,7 @@ test("Owner queues an idempotent normalized outbound send without a provider cal
 
 test("outbound queue rejects unauthorized, invalid, foreign, and mismatched idempotency requests", async () => {
   const service = new OutboundSendService({
-    isAllowedSender: async () => false,
+    isAllowedSender: async () => null,
     queue: async () => {
       throw new Error("IDEMPOTENCY_KEY_REUSED");
     },
@@ -60,6 +64,7 @@ test("outbound queue rejects unauthorized, invalid, foreign, and mismatched idem
       from: "support@example.test",
       to: "person@example.test",
       subject: "Hi",
+      text: "Body",
     }),
     /OWNER_REQUIRED/,
   );
@@ -70,6 +75,7 @@ test("outbound queue rejects unauthorized, invalid, foreign, and mismatched idem
       from: "bad",
       to: "person@example.test",
       subject: "Hi",
+      text: "Body",
     }),
     /INVALID_OUTBOUND_SEND_INPUT/,
   );
@@ -80,7 +86,28 @@ test("outbound queue rejects unauthorized, invalid, foreign, and mismatched idem
       from: "foreign@example.test",
       to: "person@example.test",
       subject: "Hi",
+      text: "Body",
     }),
     /SENDER_NOT_ALLOWED/,
+  );
+  const contentService = new OutboundSendService({
+    isAllowedSender: async () => ({
+      connectionId: "connection-1",
+      replyTo: null,
+    }),
+    queue: async () => {
+      throw new Error("MUST_NOT_QUEUE");
+    },
+  });
+  await assert.rejects(
+    contentService.queue({
+      account: owner,
+      idempotencyKey: "key",
+      from: "support@example.test",
+      to: "person@example.test",
+      subject: "Hi",
+      text: "",
+    } as never),
+    /INVALID_OUTBOUND_SEND_INPUT/,
   );
 });

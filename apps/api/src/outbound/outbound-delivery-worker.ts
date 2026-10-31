@@ -1,9 +1,13 @@
 export interface ClaimedOutboundSend {
   id: string;
+  organizationId: string;
+  connectionId: string;
   idempotencyKey: string;
   from: string;
+  replyTo: string | null;
   to: string;
   subject: string;
+  text: string;
 }
 
 export interface OutboundDeliveryRepository {
@@ -30,9 +34,13 @@ export class OutboundDeliveryWorker {
     try {
       const result = await this.transport.dispatch({
         idempotencyKey: send.idempotencyKey,
+        organizationId: send.organizationId,
+        connectionId: send.connectionId,
         from: send.from,
+        replyTo: send.replyTo,
         to: send.to,
         subject: send.subject,
+        text: send.text,
       });
       if (result.kind === "sent") await this.repository.markSent(send.id);
       else await this.repository.markFailed(send.id, "provider_unavailable");

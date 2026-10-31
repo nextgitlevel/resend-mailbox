@@ -25,7 +25,10 @@ const auth = (role: "owner" | "member" = "owner") =>
   } satisfies AuthRepository);
 const service = () =>
   new OutboundSendService({
-    isAllowedSender: async () => true,
+    isAllowedSender: async () => ({
+      connectionId: "connection-1",
+      replyTo: null,
+    }),
     queue: async (input) => ({
       id: "send-1",
       ...input,
@@ -50,6 +53,7 @@ test("outbound queue route is Owner-only and never accepts organization authorit
       from: "support@example.test",
       to: "person@example.test",
       subject: "Hi",
+      text: "Body",
       organizationId: "foreign",
     },
   });
@@ -62,6 +66,7 @@ test("outbound queue route is Owner-only and never accepts organization authorit
       from: "support@example.test",
       to: "person@example.test",
       subject: "Hi",
+      text: "Body",
     },
   });
   assert.equal(response.statusCode, 201);

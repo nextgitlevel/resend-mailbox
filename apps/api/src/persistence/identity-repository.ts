@@ -189,16 +189,20 @@ const upStatements = [
       id UUID PRIMARY KEY,
       organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
       idempotency_key TEXT NOT NULL CHECK (char_length(idempotency_key) BETWEEN 1 AND 200),
+      connection_id UUID NOT NULL,
       sender TEXT NOT NULL,
       recipient TEXT NOT NULL,
       subject TEXT NOT NULL CHECK (char_length(subject) BETWEEN 1 AND 998),
+      text_body TEXT NOT NULL CHECK (char_length(text_body) BETWEEN 1 AND 100000),
       fingerprint TEXT NOT NULL CHECK (char_length(fingerprint) > 0),
       status TEXT NOT NULL CHECK (status IN ('queued', 'claimed', 'sent', 'failed')),
       claimed_at TIMESTAMPTZ,
       sent_at TIMESTAMPTZ,
       failure_code TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      UNIQUE (organization_id, idempotency_key)
+      UNIQUE (organization_id, idempotency_key),
+      FOREIGN KEY (organization_id, connection_id)
+        REFERENCES resend_connections (organization_id, id) ON DELETE RESTRICT
     )
   `,
   `
@@ -848,9 +852,13 @@ export class PostgresIdentityRepository
   public async isAllowedSender(input: {
     organizationId: string;
     from: string;
-  }): Promise<boolean> {
-    const result = await this.pool.query({
-      text: `SELECT 1 FROM allowed_recipient_addresses AS address
+  }): Promise<{ connectionId: string; replyTo: string | null } | null> {
+    const result = await this.pool.query<{
+      connection_id: string;
+      reply_to: string | null;
+    }>({
+      text: `SELECT domain.connection_id, address.reply_to
+             FROM allowed_recipient_addresses AS address
              INNER JOIN domains AS domain ON domain.id = address.domain_id
                AND domain.organization_id = address.organization_id
              WHERE address.organization_id = $1
@@ -858,7 +866,10 @@ export class PostgresIdentityRepository
                AND address.local_part || '@' || domain.normalized_name = $2`,
       values: [input.organizationId, input.from],
     });
-    return result.rowCount === 1;
+    const row = result.rows[0];
+    return row
+      ? { connectionId: row.connection_id, replyTo: row.reply_to }
+      : null;
   }
 
   public async queue(
@@ -869,23 +880,29 @@ export class PostgresIdentityRepository
       id: string;
       organization_id: string;
       idempotency_key: string;
+      connection_id: string;
       sender: string;
+      reply_to: string | null;
       recipient: string;
       subject: string;
+      text_body: string;
       fingerprint: string;
     };
     const inserted = await this.pool.query<OutboundSendRow>({
-      text: `INSERT INTO outbound_sends (id, organization_id, idempotency_key, sender, recipient, subject, fingerprint, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued')
+      text: `INSERT INTO outbound_sends (id, organization_id, idempotency_key, connection_id, sender, reply_to, recipient, subject, text_body, fingerprint, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued')
              ON CONFLICT (organization_id, idempotency_key) DO NOTHING
-             RETURNING id, organization_id, idempotency_key, sender, recipient, subject, fingerprint`,
+             RETURNING id, organization_id, idempotency_key, connection_id, sender, reply_to, recipient, subject, text_body, fingerprint`,
       values: [
         id,
         input.organizationId,
         input.idempotencyKey,
+        input.connectionId,
         input.from,
+        input.replyTo,
         input.to,
         input.subject,
+        input.text,
         input.fingerprint,
       ],
     });
@@ -894,16 +911,19 @@ export class PostgresIdentityRepository
       return {
         id: row.id,
         organizationId: row.organization_id,
+        connectionId: row.connection_id,
         idempotencyKey: row.idempotency_key,
         from: row.sender,
+        replyTo: row.reply_to,
         to: row.recipient,
         subject: row.subject,
+        text: row.text_body,
         fingerprint: row.fingerprint,
         status: "queued",
         duplicate: false,
       };
     const existing = await this.pool.query<OutboundSendRow>({
-      text: "SELECT id, organization_id, idempotency_key, sender, recipient, subject, fingerprint FROM outbound_sends WHERE organization_id = $1 AND idempotency_key = $2",
+      text: "SELECT id, organization_id, idempotency_key, connection_id, sender, reply_to, recipient, subject, text_body, fingerprint FROM outbound_sends WHERE organization_id = $1 AND idempotency_key = $2",
       values: [input.organizationId, input.idempotencyKey],
     });
     const existingRow = existing.rows[0];
@@ -913,10 +933,13 @@ export class PostgresIdentityRepository
     return {
       id: existingRow.id,
       organizationId: existingRow.organization_id,
+      connectionId: existingRow.connection_id,
       idempotencyKey: existingRow.idempotency_key,
       from: existingRow.sender,
+      replyTo: existingRow.reply_to,
       to: existingRow.recipient,
       subject: existingRow.subject,
+      text: existingRow.text_body,
       fingerprint: existingRow.fingerprint,
       status: "queued",
       duplicate: true,
@@ -926,10 +949,14 @@ export class PostgresIdentityRepository
   public async claimNext(): Promise<ClaimedOutboundSend | null> {
     const result = await this.pool.query<{
       id: string;
+      organization_id: string;
+      connection_id: string;
       idempotency_key: string;
       sender: string;
+      reply_to: string | null;
       recipient: string;
       subject: string;
+      text_body: string;
     }>({
       text: `WITH next AS (
                SELECT id FROM outbound_sends WHERE status = 'queued'
@@ -937,16 +964,20 @@ export class PostgresIdentityRepository
              )
              UPDATE outbound_sends SET status = 'claimed', claimed_at = now()
              WHERE id = (SELECT id FROM next)
-             RETURNING id, idempotency_key, sender, recipient, subject`,
+             RETURNING id, organization_id, connection_id, idempotency_key, sender, reply_to, recipient, subject, text_body`,
     });
     const row = result.rows[0];
     return row
       ? {
           id: row.id,
+          organizationId: row.organization_id,
+          connectionId: row.connection_id,
           idempotencyKey: row.idempotency_key,
           from: row.sender,
+          replyTo: row.reply_to,
           to: row.recipient,
           subject: row.subject,
+          text: row.text_body,
         }
       : null;
   }

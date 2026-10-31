@@ -3,6 +3,32 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-31 — live development Resend outbound delivery
+
+**Outcome:** outbound queue records the selected organization-owned connection,
+reply-to address, and bounded plain-text body. A development-only worker
+decrypts that connection's credential in memory and sends through Resend's
+email API with the queued idempotency key. Provider and credential errors are
+reduced to a safe failure outcome.
+
+**Test-first evidence:** the existing transport absence and empty-body red
+tests were recorded in `ACTIVE.md`; deterministic transport and API request
+fixtures now cover successful mapping, secret nonexposure, absent scoped
+connection, provider failure, HTTP failure, and malformed provider response.
+
+**Verification:** `corepack pnpm verify` passed (secret scan, format, lint,
+typecheck, repository tests, and API tests: 50 passed, 7 database integration
+tests skipped). `corepack pnpm --filter @resend-mailbox/api typecheck` and API
+tests passed. `git diff --check` is required before commit. Database-backed
+integration tests could not run because the Docker daemon socket denied access.
+
+**Result:** local development can now deliver queued plain-text emails through
+an authenticated Resend connection. `worker:dev` requires `NODE_ENV=development`,
+`DATABASE_URL`, and a valid development `ENCRYPTION_MASTER_KEY`; it refuses
+production startup. No live Resend request, secret, deployment artifact, VPS
+runtime configuration, or production service was changed. Production delivery
+still requires reviewed KMS and worker runtime composition.
+
 ## 2026-10-31 — worker-owned outbound delivery state machine
 
 **Outcome:** a worker atomically claims queued sends once, passes the stored

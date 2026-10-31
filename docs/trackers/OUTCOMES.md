@@ -1,5 +1,19 @@
 # Outcomes and proof
 
+## 2026-10-31 — live development Resend outbound delivery
+
+- **Proof:** queue payload binds the selected organization-owned Resend
+  connection, reply-to policy, and bounded plain text; its idempotency
+  fingerprint includes delivery-affecting values. Deterministic fixtures prove
+  the fixed Resend endpoint, payload/header mapping, scoped credential lookup,
+  safe failures, and no live network use in tests.
+- **Verification:** `corepack pnpm verify` passed. PostgreSQL integration
+  cases were skipped because Docker daemon socket access was denied.
+- **Operational impact:** none. Only a development-only worker entrypoint was
+  added; it requires development key management and refuses non-development
+  startup. No live provider call, secret, runtime configuration, deployment
+  artifact, or production service changed.
+
 Use this append-only log for evidence that a completed change achieved its
 intended outcome. Each entry must include:
 

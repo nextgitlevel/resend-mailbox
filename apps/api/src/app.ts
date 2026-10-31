@@ -474,7 +474,8 @@ export const buildApp = (options: AppOptions = {}) => {
       typeof body.idempotencyKey !== "string" ||
       typeof body.from !== "string" ||
       typeof body.to !== "string" ||
-      typeof body.subject !== "string"
+      typeof body.subject !== "string" ||
+      typeof body.text !== "string"
     )
       return reply.code(400).send({ error: "INVALID_OUTBOUND_SEND_INPUT" });
     try {
@@ -484,6 +485,7 @@ export const buildApp = (options: AppOptions = {}) => {
         from: body.from,
         to: body.to,
         subject: body.subject,
+        text: body.text,
       });
       return reply.code(send.duplicate ? 200 : 201).send({ send });
     } catch (error) {

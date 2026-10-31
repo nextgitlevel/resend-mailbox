@@ -8,10 +8,14 @@ test("worker claims a queued send once, dispatches with its idempotency key, and
     {
       claimNext: async () => ({
         id: "send-1",
+        organizationId: "organization-1",
+        connectionId: "connection-1",
         idempotencyKey: "key-1",
         from: "support@example.test",
+        replyTo: null,
         to: "person@example.test",
         subject: "Hi",
+        text: "Body",
       }),
       markSent: async (id) => {
         events.push(["sent", id]);
@@ -32,10 +36,14 @@ test("worker claims a queued send once, dispatches with its idempotency key, and
     [
       "dispatch",
       {
+        organizationId: "organization-1",
+        connectionId: "connection-1",
         idempotencyKey: "key-1",
         from: "support@example.test",
+        replyTo: null,
         to: "person@example.test",
         subject: "Hi",
+        text: "Body",
       },
     ],
     ["sent", "send-1"],
@@ -48,10 +56,14 @@ test("worker records a safe failure once when dispatch fails", async () => {
     {
       claimNext: async () => ({
         id: "send-1",
+        organizationId: "organization-1",
+        connectionId: "connection-1",
         idempotencyKey: "key-1",
         from: "support@example.test",
+        replyTo: null,
         to: "person@example.test",
         subject: "Hi",
+        text: "Body",
       }),
       markSent: async () => {
         throw new Error("NOT_USED");
