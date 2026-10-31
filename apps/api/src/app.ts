@@ -342,6 +342,44 @@ export const buildApp = (options: AppOptions = {}) => {
     }
   });
 
+  app.post("/v1/domains/:domainId/addresses", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.domainSettingsService)
+      return reply.code(503).send({ error: "DOMAINS_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const { domainId } = request.params as { domainId?: string };
+    const body = request.body;
+    if (
+      !domainId ||
+      !isRecord(body) ||
+      typeof body.mailboxId !== "string" ||
+      typeof body.localPart !== "string"
+    )
+      return reply.code(400).send({ error: "INVALID_ALLOWED_ADDRESS_INPUT" });
+    try {
+      return reply
+        .code(201)
+        .send({
+          address: await options.domainSettingsService.createAllowedAddress({
+            account,
+            domainId,
+            mailboxId: body.mailboxId,
+            localPart: body.localPart,
+          }),
+        });
+    } catch (error) {
+      const code = domainErrorCode(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
+        .send({ error: code });
+    }
+  });
+
   return app;
 };
 
