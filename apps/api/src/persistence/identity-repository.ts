@@ -176,6 +176,14 @@ const upStatements = [
     )
   `,
   `
+    CREATE TABLE inbound_webhook_receipts (
+      event_id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `,
+  `
     CREATE TABLE instance_bootstrap (
       id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
       owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
@@ -188,6 +196,7 @@ const upStatements = [
 const downStatements = [
   "DROP TABLE IF EXISTS instance_bootstrap",
   "DROP TABLE IF EXISTS sessions",
+  "DROP TABLE IF EXISTS inbound_webhook_receipts",
   "DROP TABLE IF EXISTS allowed_recipient_addresses",
   "DROP TABLE IF EXISTS domains",
   "DROP TABLE IF EXISTS mailboxes",
@@ -630,6 +639,19 @@ export class PostgresIdentityRepository implements DomainSettingsRepository {
       ],
     });
     return { id, ...input };
+  }
+
+  public async capture(input: {
+    eventId: string;
+    eventType: string;
+    payload: unknown;
+  }): Promise<boolean> {
+    const result = await this.pool.query({
+      text: `INSERT INTO inbound_webhook_receipts (event_id, event_type, payload)
+             VALUES ($1, $2, $3::jsonb) ON CONFLICT (event_id) DO NOTHING`,
+      values: [input.eventId, input.eventType, JSON.stringify(input.payload)],
+    });
+    return result.rowCount === 1;
   }
 
   public async findSecretEnvelopeForOrganization(

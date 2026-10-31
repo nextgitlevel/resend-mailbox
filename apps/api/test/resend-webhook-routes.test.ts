@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import test from "node:test";
 
 import { buildApp } from "../src/app.js";
+import { WebhookReceiptService } from "../src/inbound/webhook-receipt-service.js";
 
 const secret = `whsec_${Buffer.from("test-webhook-secret").toString("base64")}`;
 const payload = JSON.stringify({
@@ -21,7 +22,17 @@ const headers = (body: string) => {
 };
 
 test("Resend webhook accepts an exactly signed raw payload and rejects tampering", async (t) => {
-  const app = buildApp({ resendWebhookSecret: secret });
+  const seen = new Set<string>();
+  const app = buildApp({
+    resendWebhookSecret: secret,
+    webhookReceiptService: new WebhookReceiptService({
+      capture: async ({ eventId }) => {
+        if (seen.has(eventId)) return false;
+        seen.add(eventId);
+        return true;
+      },
+    }),
+  });
   t.after(() => app.close());
   const accepted = await app.inject({
     method: "POST",
@@ -36,6 +47,6 @@ test("Resend webhook accepts an exactly signed raw payload and rejects tampering
     payload: `${payload} `,
   });
   assert.equal(accepted.statusCode, 202);
-  assert.deepEqual(accepted.json(), { received: true });
+  assert.deepEqual(accepted.json(), { received: true, duplicate: false });
   assert.equal(rejected.statusCode, 400);
 });

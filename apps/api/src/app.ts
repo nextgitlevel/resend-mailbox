@@ -4,6 +4,7 @@ import Fastify from "fastify";
 
 import { AuthService } from "./auth/auth-service.js";
 import { DomainSettingsService } from "./domains/domain-settings-service.js";
+import { WebhookReceiptService } from "./inbound/webhook-receipt-service.js";
 import { ConnectionSettingsService } from "./settings/connection-settings-service.js";
 import { ConnectionValidationService } from "./settings/connection-validation-service.js";
 
@@ -13,6 +14,7 @@ export interface AppOptions {
   connectionValidationService?: ConnectionValidationService;
   domainSettingsService?: DomainSettingsService;
   resendWebhookSecret?: string;
+  webhookReceiptService?: WebhookReceiptService;
   secureCookies?: boolean;
 }
 
@@ -62,7 +64,19 @@ export const buildApp = (options: AppOptions = {}) => {
     ) {
       return reply.code(400).send({ error: "INVALID_WEBHOOK_SIGNATURE" });
     }
-    return reply.code(202).send({ received: true });
+    if (!options.webhookReceiptService)
+      return reply.code(503).send({ error: "WEBHOOK_RECEIPTS_NOT_CONFIGURED" });
+    try {
+      const receipt = await options.webhookReceiptService.capture({
+        eventId: id,
+        payload: request.body,
+      });
+      return reply
+        .code(202)
+        .send({ received: true, duplicate: receipt.duplicate });
+    } catch {
+      return reply.code(400).send({ error: "INVALID_WEBHOOK_EVENT" });
+    }
   });
 
   app.post("/v1/bootstrap", async (request, reply) => {
