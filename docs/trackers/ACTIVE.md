@@ -2,25 +2,18 @@
 
 ## Slice ID
 
-S2.domain-address-persistence
+S2.domains-routing
 
 ## Next task
 
-Sprint 2 — domain, mailbox, and allowed-recipient persistence
+Sprint 2 — domain verification transition and routing configuration
 
 ## Acceptance criteria
 
-- Persist organization-scoped domains with globally normalized unique names,
-  exactly one connection, and an explicit verification state.
-- Persist mailboxes and allowed recipient addresses; each address belongs to
-  one verified domain and resolves to one mailbox in the same organization.
-- Persist only explicit per-domain fallback policies and enforce their mailbox
-  ownership where applicable.
-- Provide Owner-only, organization-scoped configuration routes that never
-  accept client-selected organization authority.
-- Record test-first evidence and all quality-gate results before completion.
-- No production-system, secret, deployment, or undocumented architecture change.
+- Pending task selection: translate the remaining Sprint 2 verification and
+  routing-policy plan requirements into a bounded slice without introducing a
+  live Resend provider dependency or accepting inbound mail.
 
 ## Test-first evidence
 
-- Pending: persistence and route tests will be added before implementation.
+- Pending: define acceptance criteria before implementation.

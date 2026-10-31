@@ -362,16 +362,14 @@ export const buildApp = (options: AppOptions = {}) => {
     )
       return reply.code(400).send({ error: "INVALID_ALLOWED_ADDRESS_INPUT" });
     try {
-      return reply
-        .code(201)
-        .send({
-          address: await options.domainSettingsService.createAllowedAddress({
-            account,
-            domainId,
-            mailboxId: body.mailboxId,
-            localPart: body.localPart,
-          }),
-        });
+      return reply.code(201).send({
+        address: await options.domainSettingsService.createAllowedAddress({
+          account,
+          domainId,
+          mailboxId: body.mailboxId,
+          localPart: body.localPart,
+        }),
+      });
     } catch (error) {
       const code = domainErrorCode(error);
       return reply
@@ -530,6 +528,7 @@ const domainErrorCode = (error: unknown) => {
   return [
     "OWNER_REQUIRED",
     "CONNECTION_NOT_FOUND",
+    "DOMAIN_FALLBACK_MAILBOX_NOT_FOUND",
     "INVALID_DOMAIN_INPUT",
     "INVALID_MAILBOX_INPUT",
   ].includes(message)

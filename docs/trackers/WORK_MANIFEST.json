@@ -82,9 +82,17 @@
     },
     {
       "id": "S2.domain-address-persistence",
-      "status": "active",
+      "status": "completed",
       "depends_on": ["S2.routing-foundation"],
-      "plan_reference": "Sprint 2: domain setup/verification status and allowed-recipient mailbox assignment"
+      "plan_reference": "Sprint 2: domain setup/verification status and allowed-recipient mailbox assignment",
+      "evidence": {
+        "tracker": "2026-10-31 — organization-safe domain and allowed-recipient persistence hardening",
+        "tests": [
+          "apps/api/test/domain-settings-service.test.ts",
+          "apps/api/test/domain-settings-routes.test.ts",
+          "apps/api/test/identity-repository.integration.test.ts"
+        ]
+      }
     },
     {
       "id": "S3.outbound",

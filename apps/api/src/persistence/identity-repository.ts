@@ -559,6 +559,7 @@ export class PostgresIdentityRepository implements DomainSettingsRepository {
     fallback: DomainFallbackPolicy;
   }): Promise<RedactedDomain> {
     const id = randomUUID();
+    const name = input.name.trim().toLowerCase();
     const fallbackMailboxId =
       input.fallback.kind === "catch_all" ? input.fallback.mailboxId : null;
     await this.pool.query({
@@ -572,7 +573,7 @@ export class PostgresIdentityRepository implements DomainSettingsRepository {
         id,
         input.organizationId,
         input.connectionId,
-        input.name,
+        name,
         input.fallback.kind,
         fallbackMailboxId,
       ],
@@ -581,7 +582,7 @@ export class PostgresIdentityRepository implements DomainSettingsRepository {
       id,
       organizationId: input.organizationId,
       connectionId: input.connectionId,
-      name: input.name,
+      name,
       verificationStatus: "pending",
       fallback: input.fallback,
     };
@@ -627,17 +628,38 @@ export class PostgresIdentityRepository implements DomainSettingsRepository {
     localPart: string;
   }): Promise<AllowedAddress> {
     const id = randomUUID();
-    await this.pool.query({
-      text: `INSERT INTO allowed_recipient_addresses (id, organization_id, domain_id, mailbox_id, local_part)
-             VALUES ($1, $2, $3, $4, $5)`,
+    const result = await this.pool.query({
+      text: `
+        WITH eligible_domain AS (
+          SELECT 1
+          FROM domains
+          WHERE id = $2
+            AND organization_id = $3
+            AND verification_status = 'verified'
+        ), eligible_mailbox AS (
+          SELECT 1
+          FROM mailboxes
+          WHERE id = $4 AND organization_id = $3
+        )
+        INSERT INTO allowed_recipient_addresses (
+          id, organization_id, domain_id, mailbox_id, local_part
+        )
+        SELECT $1, $3, $2, $4, $5
+        FROM eligible_domain CROSS JOIN eligible_mailbox
+      `,
       values: [
         id,
-        input.organizationId,
         input.domainId,
+        input.organizationId,
         input.mailboxId,
         input.localPart,
       ],
     });
+
+    if (result.rowCount !== 1) {
+      throw new Error("ALLOWED_ADDRESS_REQUIRES_VERIFIED_DOMAIN");
+    }
+
     return { id, ...input };
   }
 

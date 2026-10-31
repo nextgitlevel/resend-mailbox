@@ -310,12 +310,39 @@ integrationTest(
       organizationId: first.organizationId,
       name: "Primary inbox",
     });
+    const foreignMailbox = await repository.createMailbox({
+      organizationId: second.organizationId,
+      name: "Foreign inbox",
+    });
     const domain = await repository.createDomain({
       organizationId: first.organizationId,
       connectionId: first.connectionId,
       name: "nextlevelmaintenance.com",
       fallback: { kind: "quarantine" },
     });
+    assert.equal(domain.verificationStatus, "pending");
+    await assert.rejects(
+      repository.createAllowedAddress({
+        organizationId: first.organizationId,
+        domainId: domain.id,
+        mailboxId: mailbox.id,
+        localPart: "marcus",
+      }),
+      /ALLOWED_ADDRESS_REQUIRES_VERIFIED_DOMAIN/,
+    );
+    await pool.query({
+      text: "UPDATE domains SET verification_status = 'verified' WHERE id = $1",
+      values: [domain.id],
+    });
+    await assert.rejects(
+      repository.createAllowedAddress({
+        organizationId: first.organizationId,
+        domainId: domain.id,
+        mailboxId: foreignMailbox.id,
+        localPart: "foreign",
+      }),
+      /ALLOWED_ADDRESS_REQUIRES_VERIFIED_DOMAIN/,
+    );
     const address = await repository.createAllowedAddress({
       organizationId: first.organizationId,
       domainId: domain.id,
@@ -323,7 +350,6 @@ integrationTest(
       localPart: "marcus",
     });
 
-    assert.equal(domain.verificationStatus, "pending");
     assert.deepEqual(address, {
       id: address.id,
       organizationId: first.organizationId,

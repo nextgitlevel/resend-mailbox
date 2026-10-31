@@ -10,6 +10,31 @@ intended outcome. Each entry must include:
   automated proof is insufficient.
 - Known limitations, follow-up work, and rollback notes.
 
+## 2026-10-31 — organization-safe domain and allowed-recipient persistence hardening
+
+- **Intended outcome:** prevent cross-organization catch-all and
+  allowed-recipient bindings, and make verification state enforceable in the
+  persistence boundary rather than only in HTTP/service code.
+- **Proof:** focused service and route tests cover scoped catch-all rejection
+  plus Owner-only route access. A PostgreSQL integration test first reproduced
+  acceptance of an address on a pending domain, then passed after the
+  repository's atomic eligible-domain/mailbox insert required `verified`.
+  The database-backed API suite passed 38 tests; `corepack pnpm verify` and
+  `git diff --check` passed.
+- **Authoritative application paths:** ownership checks are in
+  `apps/api/src/domains/domain-settings-service.ts`; atomic address persistence
+  and domain normalization are in
+  `apps/api/src/persistence/identity-repository.ts`; API authorization is in
+  `apps/api/src/app.ts`. These are source paths, not runtime configuration,
+  and no live service reads them. There are no mirrored copies.
+- **Limitations:** live Resend domain verification, asynchronous verification
+  transitions, provider calls, inbound mail processing, and client settings UI
+  remain deferred to subsequent Sprint 2+ slices.
+- **Operational impact:** no runtime configuration, secret, systemd unit,
+  certificate, deployment artifact, or external provider state changed. The
+  proof-only development Compose stack uses ephemeral environment values and
+  is removed with its volumes after verification.
+
 ## 2026-10-31 — deterministic recipient-routing foundation
 
 - **Intended outcome:** apply the accepted organization/domain and inbound

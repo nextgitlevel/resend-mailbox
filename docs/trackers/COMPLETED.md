@@ -3,6 +3,50 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-31 — organization-safe domain and allowed-recipient persistence hardening
+
+**Outcome:** completed the active Sprint 2 persistence slice with durable
+organization ownership enforcement for catch-all policies and allowed
+recipient addresses.
+
+**Acceptance criteria met:**
+
+- Domains are normalized before persistence and retain globally unique names,
+  an organization-scoped connection, and an explicit verification state.
+- A catch-all fallback is rejected before persistence unless its mailbox is
+  found in the authenticated Owner's organization.
+- The repository atomically creates an allowed recipient only when both the
+  domain and mailbox belong to the organization and the domain is verified;
+  direct repository callers cannot bypass that verified-domain boundary.
+- Owner-only configuration derives organization authority solely from the
+  session; allowed-address route tests cover success, unauthenticated, and
+  member-role cases.
+
+**Test-first evidence:**
+
+- The focused domain-service test initially failed its new foreign-mailbox
+  case with `Missing expected rejection.` (3 passed, 1 failed) under
+  `cd apps/api && node --import tsx --test test/domain-settings-service.test.ts`.
+- The database integration regression initially failed with `Missing expected
+rejection.` when a pending domain could receive an allowed address under
+  `DATABASE_URL='postgresql://resend_mailbox_test:compose-probe-only@127.0.0.1:15432/resend_mailbox_test' node --import tsx --test test/identity-repository.integration.test.ts`
+  (4 passed, 1 failed).
+
+**Verification:**
+
+```bash
+cd apps/api && node --import tsx --test test/domain-settings-service.test.ts test/domain-settings-routes.test.ts
+DATABASE_URL='postgresql://resend_mailbox_test:compose-probe-only@127.0.0.1:15432/resend_mailbox_test' corepack pnpm --filter @resend-mailbox/api test
+corepack pnpm verify
+git diff --check
+```
+
+**Result:** passed. Independent test-runner verification passed the full
+database-backed API suite (38 tests); independent quality review was requested
+before commit. The temporary development Compose stack and volumes are removed
+after verification. No provider call, secret, runtime configuration,
+deployment artifact, or production service changed.
+
 ## 2026-10-31 — deterministic recipient-routing foundation
 
 **Outcome:** added the provider-independent routing policy required by ADRs

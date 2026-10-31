@@ -83,6 +83,17 @@ export class DomainSettingsService {
       throw new Error("CONNECTION_NOT_FOUND");
     }
 
+    if (input.fallback.kind === "catch_all") {
+      const mailbox = await this.repository.findMailboxForOrganization({
+        organizationId: input.account.organizationId,
+        mailboxId: input.fallback.mailboxId,
+      });
+
+      if (!mailbox) {
+        throw new Error("DOMAIN_FALLBACK_MAILBOX_NOT_FOUND");
+      }
+    }
+
     return this.repository.createDomain({
       organizationId: input.account.organizationId,
       connectionId: input.connectionId,

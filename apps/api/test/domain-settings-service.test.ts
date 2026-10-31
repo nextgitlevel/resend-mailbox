@@ -103,6 +103,23 @@ test("only an Owner can configure domains, and a foreign connection is concealed
   );
 });
 
+test("a catch-all domain rejects a mailbox outside the Owner organization before persistence", async () => {
+  const repository = createRepository();
+  repository.findMailboxForOrganization = async () => null;
+  const service = new DomainSettingsService(repository);
+
+  await assert.rejects(
+    service.createDomain({
+      account: owner,
+      connectionId: "connection-1",
+      name: "nextlevelmaintenance.com",
+      fallback: { kind: "catch_all", mailboxId: "foreign-mailbox" },
+    }),
+    /DOMAIN_FALLBACK_MAILBOX_NOT_FOUND/,
+  );
+  assert.deepEqual(repository.createdDomains, []);
+});
+
 test("an allowed recipient requires a verified domain and mailbox in the same organization", async () => {
   const repository = createRepository();
   const service = new DomainSettingsService(repository);
