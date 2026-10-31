@@ -128,6 +128,23 @@ integrationTest(
 );
 
 integrationTest(
+  "outbound worker claims a queued send once and persists terminal outcomes",
+  async (t) => {
+    const { pool, cleanup } = await createIsolatedSchema();
+    const repository = new PostgresIdentityRepository(pool);
+    t.after(cleanup);
+    const owner = await repository.bootstrapOwner({ userEmail: "worker@example.test", organizationName: "Worker", connectionName: "Worker", encryptedEnvelope });
+    const queued = await repository.queue({ organizationId: owner.organizationId, idempotencyKey: "worker-key", from: "support@example.test", to: "person@example.test", subject: "Hi", fingerprint: "worker-fingerprint" });
+    const [first, second] = await Promise.all([repository.claimNext(), repository.claimNext()]);
+    assert.deepEqual([first?.id, second?.id].filter(Boolean), [queued.id]);
+    await repository.markFailed(queued.id, "provider_unavailable");
+    const failed = await pool.query<{ status: string; failure_code: string | null }>("SELECT status, failure_code FROM outbound_sends WHERE id = $1", [queued.id]);
+    assert.deepEqual(failed.rows[0], { status: "failed", failure_code: "provider_unavailable" });
+    assert.equal(await repository.claimNext(), null);
+  },
+);
+
+integrationTest(
   "Owner connection configuration stores an encrypted credential without its plaintext",
   async (t) => {
     const { pool, cleanup } = await createIsolatedSchema();

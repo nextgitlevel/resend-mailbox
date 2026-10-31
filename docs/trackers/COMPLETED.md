@@ -3,6 +3,23 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-31 — worker-owned outbound delivery state machine
+
+**Outcome:** a worker atomically claims queued sends once, passes the stored
+idempotency key to an injected delivery transport, and persists only safe sent
+or failed outcomes.
+
+**Test-first evidence:** focused worker test first failed because the worker
+module did not exist.
+
+**Verification:** database-backed API suite passed 52 tests, with a concurrent
+claim proof and terminal failure persistence; `corepack pnpm verify`,
+formatting, lint, typecheck, and `git diff --check` passed.
+
+**Result:** provider failures record only `provider_unavailable`. Live Resend
+SDK composition, credentials, retry policy, and deployment remain separate.
+No runtime configuration, secret, provider call, or deployment artifact changed.
+
 ## 2026-10-31 — idempotent outbound queue foundation
 
 **Outcome:** added an Owner-only, organization-scoped durable outbound queue

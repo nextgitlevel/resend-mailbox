@@ -6,12 +6,13 @@ S3.outbound
 
 ## Next task
 
-Sprint 3 — worker-owned Resend delivery transport
+Sprint 3 — live Resend delivery transport composition
 
 ## Acceptance criteria
 
-- Pending task selection: build a worker-owned, fixture-backed Resend dispatch
-  boundary that consumes queued sends exactly once and records safe outcomes.
+- Pending task selection: compose a live Resend SDK transport around controlled
+  credential decryption and worker execution without exposing credentials or
+  creating a production runtime configuration in this checkout.
 
 ## Test-first evidence
 

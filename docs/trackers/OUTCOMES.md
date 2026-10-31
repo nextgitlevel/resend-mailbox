@@ -10,6 +10,15 @@ intended outcome. Each entry must include:
   automated proof is insufficient.
 - Known limitations, follow-up work, and rollback notes.
 
+## 2026-10-31 — worker-owned outbound delivery state machine
+
+- **Proof:** PostgreSQL `SKIP LOCKED` claim proof returns one claimant under
+  contention; unit tests prove idempotency-key handoff and safe terminal
+  failures. The disposable Compose stack was removed after its database proof.
+- **Operational impact:** none. `compose.dev.yaml` remains the authoritative
+  development-only declaration; no live service, credential, or provider state
+  changed.
+
 ## 2026-10-31 — idempotent outbound queue foundation
 
 - **Proof:** queue service fetch guard proves no network action; persistence

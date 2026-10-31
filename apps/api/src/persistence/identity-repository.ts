@@ -10,6 +10,10 @@ import type {
   QueuedOutboundSend,
 } from "../outbound/outbound-send-service.js";
 import type {
+  ClaimedOutboundSend,
+  OutboundDeliveryRepository,
+} from "../outbound/outbound-delivery-worker.js";
+import type {
   AllowedAddress,
   DomainSettingsRepository,
   Mailbox,
@@ -189,7 +193,10 @@ const upStatements = [
       recipient TEXT NOT NULL,
       subject TEXT NOT NULL CHECK (char_length(subject) BETWEEN 1 AND 998),
       fingerprint TEXT NOT NULL CHECK (char_length(fingerprint) > 0),
-      status TEXT NOT NULL CHECK (status = 'queued'),
+      status TEXT NOT NULL CHECK (status IN ('queued', 'claimed', 'sent', 'failed')),
+      claimed_at TIMESTAMPTZ,
+      sent_at TIMESTAMPTZ,
+      failure_code TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (organization_id, idempotency_key)
     )
@@ -253,7 +260,8 @@ export class PostgresIdentityRepository
   implements
     DomainSettingsRepository,
     AddressPolicyRepository,
-    OutboundSendRepository
+    OutboundSendRepository,
+    OutboundDeliveryRepository
 {
   public constructor(private readonly pool: Pool) {}
 
@@ -913,6 +921,51 @@ export class PostgresIdentityRepository
       status: "queued",
       duplicate: true,
     };
+  }
+
+  public async claimNext(): Promise<ClaimedOutboundSend | null> {
+    const result = await this.pool.query<{
+      id: string;
+      idempotency_key: string;
+      sender: string;
+      recipient: string;
+      subject: string;
+    }>({
+      text: `WITH next AS (
+               SELECT id FROM outbound_sends WHERE status = 'queued'
+               ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
+             )
+             UPDATE outbound_sends SET status = 'claimed', claimed_at = now()
+             WHERE id = (SELECT id FROM next)
+             RETURNING id, idempotency_key, sender, recipient, subject`,
+    });
+    const row = result.rows[0];
+    return row
+      ? {
+          id: row.id,
+          idempotencyKey: row.idempotency_key,
+          from: row.sender,
+          to: row.recipient,
+          subject: row.subject,
+        }
+      : null;
+  }
+
+  public async markSent(id: string): Promise<void> {
+    await this.pool.query({
+      text: "UPDATE outbound_sends SET status = 'sent', sent_at = now() WHERE id = $1 AND status = 'claimed'",
+      values: [id],
+    });
+  }
+
+  public async markFailed(
+    id: string,
+    code: "provider_unavailable",
+  ): Promise<void> {
+    await this.pool.query({
+      text: "UPDATE outbound_sends SET status = 'failed', failure_code = $2 WHERE id = $1 AND status = 'claimed'",
+      values: [id, code],
+    });
   }
 
   public async capture(input: {
