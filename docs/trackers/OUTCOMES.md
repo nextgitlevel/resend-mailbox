@@ -1,5 +1,25 @@
 # Outcomes and proof
 
+## 2026-10-31 — authenticated plain-text compose and send status UI
+
+- **Commit:** `8b9d270`.
+- **Outcome:** Expo web/native client now has owner bootstrap/sign-in, a verified
+  sender selector, responsive plain-text compose, status polling, and a safe
+  same-key retry path for ambiguous requests while the compose page remains
+  open. API CORS permits credentialed requests only from the exact configured
+  origin, and sender listing is authenticated and organization-scoped.
+- **Verification:** `corepack pnpm verify` passed (API: 56 passed, 8 PostgreSQL
+  integration cases skipped; client: 3 passed). `corepack pnpm --filter
+@resend-mailbox/client exec expo export --platform web` passed. `git diff
+--check` passed.
+- **Operational configuration:** `.env.example` is a template only. The API
+  reads `CLIENT_ORIGIN` from its environment; the Expo bundle reads
+  `EXPO_PUBLIC_API_BASE_URL` at build time. No live service, runtime file,
+  mirror, symlink, secret, or deployment artifact changed.
+- **Limitation:** PostgreSQL sender-list isolation integration is present but
+  skipped here because Docker daemon access is denied. Production sending
+  remains disabled until reviewed KMS and worker operations are available.
+
 ## 2026-10-31 — recoverable outbound delivery and status
 
 - **Commit:** `d2c20e5`.
