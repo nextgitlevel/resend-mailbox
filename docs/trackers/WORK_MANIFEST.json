@@ -75,7 +75,7 @@
       "depends_on": ["S1.validation-fixtures"],
       "plan_reference": "Sprint 2: deterministic recipient policy from ADRs 0001 and 0002",
       "evidence": {
-        "commit": "PENDING",
+        "commit": "d57ae82",
         "tests": ["apps/api/test/recipient-routing.test.ts"],
         "verification": "corepack pnpm verify"
       }
