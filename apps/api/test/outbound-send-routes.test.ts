@@ -35,6 +35,7 @@ const service = () =>
       status: "queued",
       duplicate: false,
     }),
+    findStatus: async () => null,
   });
 
 test("outbound queue route is Owner-only and never accepts organization authority", async (t) => {
@@ -71,5 +72,26 @@ test("outbound queue route is Owner-only and never accepts organization authorit
   });
   assert.equal(response.statusCode, 201);
   assert.equal(response.json().send.organizationId, "organization-1");
+  assert.equal(forbidden.statusCode, 403);
+});
+
+test("outbound status route conceals missing and foreign send identifiers", async (t) => {
+  const app = buildApp({ authService: auth(), outboundSendService: service() });
+  const member = buildApp({
+    authService: auth("member"),
+    outboundSendService: service(),
+  });
+  t.after(async () => Promise.all([app.close(), member.close()]));
+  const missing = await app.inject({
+    method: "GET",
+    url: "/v1/outbound-sends/00000000-0000-4000-8000-000000000001",
+    headers: { cookie },
+  });
+  const forbidden = await member.inject({
+    method: "GET",
+    url: "/v1/outbound-sends/00000000-0000-4000-8000-000000000001",
+    headers: { cookie },
+  });
+  assert.equal(missing.statusCode, 404);
   assert.equal(forbidden.statusCode, 403);
 });

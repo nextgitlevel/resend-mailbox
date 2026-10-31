@@ -120,6 +120,6 @@ test("Resend outbound transport does not expose credential or provider error det
       text: "Body",
       replyTo: null,
     }),
-    { kind: "failed" },
+    { kind: "retryable" },
   );
 });

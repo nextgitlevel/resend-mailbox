@@ -19,7 +19,7 @@ export interface ResendSendClient {
     subject: string;
     text: string;
     replyTo: string | null;
-  }): Promise<{ kind: "sent" } | { kind: "failed" }>;
+  }): Promise<{ kind: "sent" } | { kind: "retryable" } | { kind: "failed" }>;
 }
 
 export class ResendOutboundTransport {
@@ -38,14 +38,19 @@ export class ResendOutboundTransport {
     subject: string;
     text: string;
     replyTo: string | null;
-  }): Promise<{ kind: "sent" } | { kind: "failed" }> {
+  }): Promise<{ kind: "sent" } | { kind: "retryable" } | { kind: "failed" }> {
     const envelope = await this.repository.findSecretEnvelopeForOrganization({
       organizationId: input.organizationId,
       connectionId: input.connectionId,
     });
     if (!envelope) return { kind: "failed" };
+    let credential: string;
     try {
-      const credential = await this.encryption.decrypt(envelope);
+      credential = await this.encryption.decrypt(envelope);
+    } catch {
+      return { kind: "failed" };
+    }
+    try {
       return await this.client.send({
         credential,
         idempotencyKey: input.idempotencyKey,
@@ -56,7 +61,7 @@ export class ResendOutboundTransport {
         replyTo: input.replyTo,
       });
     } catch {
-      return { kind: "failed" };
+      return { kind: "retryable" };
     }
   }
 }

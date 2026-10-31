@@ -29,6 +29,31 @@ production startup. No live Resend request, secret, deployment artifact, VPS
 runtime configuration, or production service was changed. Production delivery
 still requires reviewed KMS and worker runtime composition.
 
+## 2026-10-31 — recoverable outbound delivery and safe status
+
+**Outcome:** worker claims use a 120-second lease and persisted attempt
+counter. Transient transport failures retry up to five times with exponential
+backoff and jitter, preserving the original idempotency key. Non-retryable
+provider responses terminate safely. Abandoned sends beyond Resend's
+idempotency retention horizon become `delivery_outcome_unknown`. An
+Owner-authenticated, organization-scoped status endpoint exposes only safe
+state and timestamps.
+
+**Test-first evidence:** `cd apps/api && node --import tsx --test
+test/outbound-delivery-worker.test.ts` failed when the attempt cap was
+temporarily lowered, proving the retry-cap test detects premature exhaustion.
+Added tests for transient retry, stable idempotency key, terminal provider
+rejection, retryable HTTP statuses, scoped status, lease recovery, and expiry.
+
+**Verification:** `corepack pnpm verify` passed; API suite reported 54 passed,
+8 database integration tests skipped. Docker daemon socket access remains
+unavailable, so lease/status/expiry SQL integration cases require rerun where
+Postgres is available. `git diff --check` passed before commit.
+
+**Result:** retries stop before Resend's documented 24-hour idempotency-key
+window. See `docs/adr/0004-outbound-delivery-retries.md` for the policy and
+conservative unknown-outcome decision.
+
 ## 2026-10-31 — worker-owned outbound delivery state machine
 
 **Outcome:** a worker atomically claims queued sends once, passes the stored

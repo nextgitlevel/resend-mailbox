@@ -16,9 +16,13 @@ test("worker claims a queued send once, dispatches with its idempotency key, and
         to: "person@example.test",
         subject: "Hi",
         text: "Body",
+        attempt: 1,
       }),
       markSent: async (id) => {
         events.push(["sent", id]);
+      },
+      markRetry: async () => {
+        throw new Error("NOT_USED");
       },
       markFailed: async () => {
         throw new Error("NOT_USED");
@@ -50,7 +54,7 @@ test("worker claims a queued send once, dispatches with its idempotency key, and
   ]);
 });
 
-test("worker records a safe failure once when dispatch fails", async () => {
+test("worker retries a transient dispatch exception", async () => {
   const events: unknown[] = [];
   const worker = new OutboundDeliveryWorker(
     {
@@ -64,12 +68,16 @@ test("worker records a safe failure once when dispatch fails", async () => {
         to: "person@example.test",
         subject: "Hi",
         text: "Body",
+        attempt: 1,
       }),
       markSent: async () => {
         throw new Error("NOT_USED");
       },
-      markFailed: async (id, code) => {
-        events.push([id, code]);
+      markFailed: async () => {
+        throw new Error("NOT_USED");
+      },
+      markRetry: async (id, delayMs) => {
+        events.push([id, delayMs]);
       },
     },
     {
@@ -77,7 +85,95 @@ test("worker records a safe failure once when dispatch fails", async () => {
         throw new Error("provider unavailable");
       },
     },
+    { random: () => 0.5 },
   );
   assert.equal(await worker.deliverNext(), true);
-  assert.deepEqual(events, [["send-1", "provider_unavailable"]]);
+  assert.deepEqual(events, [["send-1", 1_000]]);
+});
+
+test("worker schedules bounded retries for transient failures with the same idempotency key", async () => {
+  const events: unknown[] = [];
+  let attempt = 0;
+  const worker = new OutboundDeliveryWorker(
+    {
+      claimNext: async () => {
+        attempt += 1;
+        return {
+          id: "send-retry",
+          organizationId: "organization-1",
+          connectionId: "connection-1",
+          idempotencyKey: "stable-key",
+          from: "support@example.test",
+          replyTo: null,
+          to: "person@example.test",
+          subject: "Hi",
+          text: "Body",
+          attempt,
+        };
+      },
+      markSent: async () => {},
+      markRetry: async (id, delayMs) => {
+        events.push(["retry", id, delayMs]);
+      },
+      markFailed: async (id, code) => {
+        events.push(["failed", id, code]);
+      },
+    },
+    {
+      dispatch: async (input) => {
+        events.push(["dispatch", input.idempotencyKey]);
+        return { kind: "retryable" as const };
+      },
+    },
+    { random: () => 0.5 },
+  );
+  await worker.deliverNext();
+  await worker.deliverNext();
+  await worker.deliverNext();
+  await worker.deliverNext();
+  await worker.deliverNext();
+  assert.deepEqual(events, [
+    ["dispatch", "stable-key"],
+    ["retry", "send-retry", 1_000],
+    ["dispatch", "stable-key"],
+    ["retry", "send-retry", 2_000],
+    ["dispatch", "stable-key"],
+    ["retry", "send-retry", 4_000],
+    ["dispatch", "stable-key"],
+    ["retry", "send-retry", 8_000],
+    ["dispatch", "stable-key"],
+    ["failed", "send-retry", "attempts_exhausted"],
+  ]);
+});
+
+test("worker marks a non-retryable provider rejection terminally", async () => {
+  const events: unknown[] = [];
+  const worker = new OutboundDeliveryWorker(
+    {
+      claimNext: async () => ({
+        id: "send-invalid",
+        organizationId: "organization-1",
+        connectionId: "connection-1",
+        idempotencyKey: "key-invalid",
+        from: "support@example.test",
+        replyTo: null,
+        to: "person@example.test",
+        subject: "Hi",
+        text: "Body",
+        attempt: 1,
+      }),
+      markSent: async () => {
+        throw new Error("NOT_USED");
+      },
+      markRetry: async () => {
+        throw new Error("NOT_USED");
+      },
+      markFailed: async (_id, code) => {
+        events.push(code);
+      },
+    },
+    { dispatch: async () => ({ kind: "failed" }) },
+  );
+  await worker.deliverNext();
+  assert.deepEqual(events, ["delivery_failed"]);
 });

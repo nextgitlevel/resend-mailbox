@@ -22,13 +22,26 @@ export class ResendSdkSendClient implements ResendSendClient {
         } satisfies CreateEmailOptions),
         signal: AbortSignal.timeout(15_000),
       });
-      if (!response.ok) return { kind: "failed" as const };
+      if (!response.ok) {
+        if (response.status === 409) {
+          const error: unknown = await response.json().catch(() => null);
+          return isConcurrentIdempotencyConflict(error)
+            ? { kind: "retryable" as const }
+            : { kind: "failed" as const };
+        }
+        return response.status === 408 ||
+          response.status === 425 ||
+          response.status === 429 ||
+          response.status >= 500
+          ? { kind: "retryable" as const }
+          : { kind: "failed" as const };
+      }
       const result: unknown = await response.json();
       return isSendResponse(result)
         ? { kind: "sent" as const }
         : { kind: "failed" as const };
     } catch {
-      return { kind: "failed" as const };
+      return { kind: "retryable" as const };
     }
   }
 }
@@ -39,3 +52,9 @@ const isSendResponse = (value: unknown): value is { id: string } =>
   "id" in value &&
   typeof value.id === "string" &&
   value.id.length > 0;
+
+const isConcurrentIdempotencyConflict = (value: unknown) =>
+  typeof value === "object" &&
+  value !== null &&
+  (("name" in value && value.name === "concurrent_idempotent_requests") ||
+    ("code" in value && value.code === "concurrent_idempotent_requests"));

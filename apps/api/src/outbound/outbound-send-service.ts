@@ -24,10 +24,36 @@ export interface OutboundSendRepository {
   queue(
     input: Omit<QueuedOutboundSend, "id" | "status" | "duplicate">,
   ): Promise<QueuedOutboundSend>;
+  findStatus(input: {
+    organizationId: string;
+    sendId: string;
+  }): Promise<OutboundSendStatus | null>;
+}
+
+export interface OutboundSendStatus {
+  id: string;
+  status: "queued" | "claimed" | "sent" | "failed";
+  attemptCount: number;
+  createdAt: Date;
+  sentAt: Date | null;
+  nextAttemptAt: Date | null;
+  failureCode:
+    | "attempts_exhausted"
+    | "delivery_failed"
+    | "delivery_outcome_unknown"
+    | null;
 }
 
 export class OutboundSendService {
   public constructor(private readonly repository: OutboundSendRepository) {}
+
+  public async status(input: { account: AuthAccount; sendId: string }) {
+    if (input.account.role !== "owner") throw new Error("OWNER_REQUIRED");
+    return this.repository.findStatus({
+      organizationId: input.account.organizationId,
+      sendId: input.sendId,
+    });
+  }
 
   public async queue(input: {
     account: AuthAccount;

@@ -7,6 +7,7 @@ import type {
 } from "../domains/address-policy-service.js";
 import type {
   OutboundSendRepository,
+  OutboundSendStatus,
   QueuedOutboundSend,
 } from "../outbound/outbound-send-service.js";
 import type {
@@ -196,7 +197,9 @@ const upStatements = [
       text_body TEXT NOT NULL CHECK (char_length(text_body) BETWEEN 1 AND 100000),
       fingerprint TEXT NOT NULL CHECK (char_length(fingerprint) > 0),
       status TEXT NOT NULL CHECK (status IN ('queued', 'claimed', 'sent', 'failed')),
+      attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count BETWEEN 0 AND 5),
       claimed_at TIMESTAMPTZ,
+      next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       sent_at TIMESTAMPTZ,
       failure_code TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -946,6 +949,42 @@ export class PostgresIdentityRepository
     };
   }
 
+  public async findStatus(input: {
+    organizationId: string;
+    sendId: string;
+  }): Promise<OutboundSendStatus | null> {
+    const result = await this.pool.query<{
+      id: string;
+      status: "queued" | "claimed" | "sent" | "failed";
+      attempt_count: number;
+      created_at: Date;
+      sent_at: Date | null;
+      next_attempt_at: Date | null;
+      failure_code:
+        | "attempts_exhausted"
+        | "delivery_failed"
+        | "delivery_outcome_unknown"
+        | null;
+    }>({
+      text: `SELECT id, status, attempt_count, created_at, sent_at,
+               next_attempt_at, failure_code
+             FROM outbound_sends WHERE organization_id = $1 AND id = $2`,
+      values: [input.organizationId, input.sendId],
+    });
+    const row = result.rows[0];
+    return row
+      ? {
+          id: row.id,
+          status: row.status,
+          attemptCount: row.attempt_count,
+          createdAt: row.created_at,
+          sentAt: row.sent_at,
+          nextAttemptAt: row.next_attempt_at,
+          failureCode: row.failure_code,
+        }
+      : null;
+  }
+
   public async claimNext(): Promise<ClaimedOutboundSend | null> {
     const result = await this.pool.query<{
       id: string;
@@ -957,14 +996,35 @@ export class PostgresIdentityRepository
       recipient: string;
       subject: string;
       text_body: string;
+      attempt_count: number;
     }>({
-      text: `WITH next AS (
-               SELECT id FROM outbound_sends WHERE status = 'queued'
-               ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
+      text: `WITH expired AS (
+               UPDATE outbound_sends SET status = 'failed', claimed_at = NULL,
+                 failure_code = 'delivery_outcome_unknown'
+               WHERE attempt_count > 0
+                 AND created_at <= now() - INTERVAL '24 hours'
+                 AND (status = 'queued' OR
+                   (status = 'claimed' AND claimed_at < now() - INTERVAL '120 seconds'))
+             ), exhausted AS (
+               UPDATE outbound_sends SET status = 'failed', claimed_at = NULL,
+                 failure_code = 'attempts_exhausted'
+               WHERE status = 'claimed' AND attempt_count >= 5
+                 AND created_at > now() - INTERVAL '24 hours'
+                 AND claimed_at < now() - INTERVAL '120 seconds'
+             ), next AS (
+               SELECT id FROM outbound_sends
+               WHERE attempt_count < 5 AND next_attempt_at <= now()
+                 AND (attempt_count = 0 OR created_at > now() - INTERVAL '24 hours')
+                 AND (status = 'queued' OR
+                   (status = 'claimed' AND claimed_at < now() - INTERVAL '120 seconds'))
+               ORDER BY next_attempt_at, created_at
+               FOR UPDATE SKIP LOCKED LIMIT 1
              )
-             UPDATE outbound_sends SET status = 'claimed', claimed_at = now()
+             UPDATE outbound_sends
+             SET status = 'claimed', claimed_at = now(), attempt_count = attempt_count + 1
              WHERE id = (SELECT id FROM next)
-             RETURNING id, organization_id, connection_id, idempotency_key, sender, reply_to, recipient, subject, text_body`,
+             RETURNING id, organization_id, connection_id, idempotency_key, sender, reply_to,
+               recipient, subject, text_body, attempt_count`,
     });
     const row = result.rows[0];
     return row
@@ -978,6 +1038,7 @@ export class PostgresIdentityRepository
           to: row.recipient,
           subject: row.subject,
           text: row.text_body,
+          attempt: row.attempt_count,
         }
       : null;
   }
@@ -991,11 +1052,20 @@ export class PostgresIdentityRepository
 
   public async markFailed(
     id: string,
-    code: "provider_unavailable",
+    code: "attempts_exhausted" | "delivery_failed",
   ): Promise<void> {
     await this.pool.query({
-      text: "UPDATE outbound_sends SET status = 'failed', failure_code = $2 WHERE id = $1 AND status = 'claimed'",
+      text: "UPDATE outbound_sends SET status = 'failed', claimed_at = NULL, failure_code = $2 WHERE id = $1 AND status = 'claimed'",
       values: [id, code],
+    });
+  }
+
+  public async markRetry(id: string, delayMs: number): Promise<void> {
+    await this.pool.query({
+      text: `UPDATE outbound_sends SET status = 'queued', claimed_at = NULL,
+               next_attempt_at = now() + ($2 * INTERVAL '1 millisecond')
+             WHERE id = $1 AND status = 'claimed' AND attempt_count < 5`,
+      values: [id, delayMs],
     });
   }
 

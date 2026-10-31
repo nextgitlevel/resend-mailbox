@@ -496,6 +496,41 @@ export const buildApp = (options: AppOptions = {}) => {
     }
   });
 
+  app.get<{ Params: { sendId: string } }>(
+    "/v1/outbound-sends/:sendId",
+    async (request, reply) => {
+      if (!options.authService)
+        return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+      if (!options.outboundSendService)
+        return reply.code(503).send({ error: "OUTBOUND_SENDS_NOT_CONFIGURED" });
+      const account = await authenticateRequest(
+        request.headers.cookie,
+        options.authService,
+      );
+      if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+      if (
+        !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(
+          request.params.sendId,
+        )
+      )
+        return reply.code(404).send({ error: "OUTBOUND_SEND_NOT_FOUND" });
+      try {
+        const status = await options.outboundSendService.status({
+          account,
+          sendId: request.params.sendId,
+        });
+        return status
+          ? reply.send({ send: status })
+          : reply.code(404).send({ error: "OUTBOUND_SEND_NOT_FOUND" });
+      } catch (error) {
+        const code = errorMessage(error);
+        return reply
+          .code(code === "OWNER_REQUIRED" ? 403 : 400)
+          .send({ error: code });
+      }
+    },
+  );
+
   return app;
 };
 

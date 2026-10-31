@@ -32,6 +32,7 @@ test("Owner queues an idempotent normalized outbound send without a provider cal
           status: "queued" as const,
         };
       },
+      findStatus: async () => null,
     });
     const first = await service.queue({
       account: owner,
@@ -56,6 +57,7 @@ test("outbound queue rejects unauthorized, invalid, foreign, and mismatched idem
     queue: async () => {
       throw new Error("IDEMPOTENCY_KEY_REUSED");
     },
+    findStatus: async () => null,
   });
   await assert.rejects(
     service.queue({
@@ -98,6 +100,7 @@ test("outbound queue rejects unauthorized, invalid, foreign, and mismatched idem
     queue: async () => {
       throw new Error("MUST_NOT_QUEUE");
     },
+    findStatus: async () => null,
   });
   await assert.rejects(
     contentService.queue({

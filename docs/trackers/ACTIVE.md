@@ -2,25 +2,25 @@
 
 ## Slice ID
 
-S4.inbound-message-storage
+S3.outbound
 
 ## Next task
 
-Sprint 3 — make outbound delivery recoverable and visible with bounded retries,
-persisted attempt state, and an Owner-scoped send status endpoint.
+Sprint 3 — build a responsive authenticated compose and delivery-status view
+that submits to the existing API and gives clear retry/failure feedback.
 
 ## Acceptance criteria
 
-- A claimed send has a bounded lease/attempt policy so process interruption
-  does not strand it permanently; a retry always reuses the same provider
-  idempotency key.
-- Persist attempt count and next-attempt time; retry only transient failures
-  with bounded exponential backoff and jitter, and fail terminally at the cap.
-- Expose safe organization-scoped status for a send without provider secrets
-  or raw provider errors.
-- Tests cover retry timing/cap, duplicate provider idempotency, interruption
-  recovery, non-retryable errors, status authorization, and no live network.
-- Document at-most-once/at-least-once tradeoffs and provider idempotency window.
+- Owner can compose plain-text mail, select only a configured sender, and
+  submit it with a fresh idempotency key and active session cookie.
+- Show queued send status and poll the safe status endpoint until sent or
+  failed; explain unknown outcome without inviting blind resends.
+- Handle unauthenticated, unauthorized sender, validation, network, and
+  provider failure states without exposing credentials.
+- Keep web layout useful on desktop and mobile; no attachment or rich HTML
+  support until the corresponding server-side security work is approved.
+- Component tests cover successful submission, idempotent request key, status
+  transitions, and user-visible errors; no network in tests.
 
 ## Completed implementation slice
 
@@ -28,3 +28,12 @@ persisted attempt state, and an Owner-scoped send status endpoint.
 - Production KMS/worker composition remains intentionally disabled.
 - Verification: `corepack pnpm verify` passed; database integration was
   skipped because the Docker daemon socket denied access.
+
+## Test-first evidence for this task
+
+- Red: `cd apps/api && node --import tsx --test
+test/outbound-delivery-worker.test.ts` failed when the attempt limit was
+  temporarily set to four; the bounded-retry test detected premature
+  exhaustion. Restored the intended five-attempt limit, which the test covers.
+- `corepack pnpm verify` passed after implementing bounded retry/status behavior
+  (API: 54 passed, 8 PostgreSQL tests skipped). `git diff --check` passed.

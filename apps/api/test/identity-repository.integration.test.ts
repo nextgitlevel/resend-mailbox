@@ -113,6 +113,22 @@ integrationTest(
     assert.equal(queued.duplicate, false);
     assert.equal(duplicate.duplicate, true);
     assert.equal(duplicate.id, queued.id);
+    assert.equal(
+      (
+        await repository.findStatus({
+          organizationId: first.organizationId,
+          sendId: queued.id,
+        })
+      )?.status,
+      "queued",
+    );
+    assert.equal(
+      await repository.findStatus({
+        organizationId: second.organizationId,
+        sendId: queued.id,
+      }),
+      null,
+    );
     await assert.rejects(
       repository.queue({
         ...input,
@@ -158,7 +174,16 @@ integrationTest(
       repository.claimNext(),
     ]);
     assert.deepEqual([first?.id, second?.id].filter(Boolean), [queued.id]);
-    await repository.markFailed(queued.id, "provider_unavailable");
+    assert.equal(first?.attempt, 1);
+    await pool.query(
+      "UPDATE outbound_sends SET claimed_at = now() - INTERVAL '121 seconds' WHERE id = $1",
+      [queued.id],
+    );
+    const recovered = await repository.claimNext();
+    assert.equal(recovered?.id, queued.id);
+    assert.equal(recovered?.idempotencyKey, "worker-key");
+    assert.equal(recovered?.attempt, 2);
+    await repository.markFailed(queued.id, "attempts_exhausted");
     const failed = await pool.query<{
       status: string;
       failure_code: string | null;
@@ -167,9 +192,51 @@ integrationTest(
     ]);
     assert.deepEqual(failed.rows[0], {
       status: "failed",
-      failure_code: "provider_unavailable",
+      failure_code: "attempts_exhausted",
     });
     assert.equal(await repository.claimNext(), null);
+  },
+);
+
+integrationTest(
+  "outbound retry stops after Resend's idempotency retention window",
+  async (t) => {
+    const { pool, cleanup } = await createIsolatedSchema();
+    const repository = new PostgresIdentityRepository(pool);
+    t.after(cleanup);
+    const owner = await repository.bootstrapOwner({
+      userEmail: "retry-window@example.test",
+      organizationName: "Retry Window",
+      connectionName: "Retry Window",
+      encryptedEnvelope,
+    });
+    const send = await repository.queue({
+      organizationId: owner.organizationId,
+      connectionId: owner.connectionId,
+      idempotencyKey: "retry-window-key",
+      from: "support@example.test",
+      replyTo: null,
+      to: "person@example.test",
+      subject: "Hi",
+      text: "Body",
+      fingerprint: "retry-window-fingerprint",
+    });
+    await repository.claimNext();
+    await repository.markRetry(send.id, 0);
+    await pool.query(
+      "UPDATE outbound_sends SET created_at = now() - INTERVAL '25 hours' WHERE id = $1",
+      [send.id],
+    );
+    assert.equal(await repository.claimNext(), null);
+    assert.equal(
+      (
+        await repository.findStatus({
+          organizationId: owner.organizationId,
+          sendId: send.id,
+        })
+      )?.failureCode,
+      "delivery_outcome_unknown",
+    );
   },
 );
 

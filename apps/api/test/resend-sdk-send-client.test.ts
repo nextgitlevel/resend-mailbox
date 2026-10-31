@@ -65,3 +65,53 @@ test("Resend HTTP client converts HTTP and malformed responses to safe failure",
     { kind: "failed" },
   );
 });
+
+test("Resend HTTP client marks rate limits and transient server errors retryable", async () => {
+  for (const status of [408, 425, 429, 500, 503]) {
+    const client = new ResendSdkSendClient(
+      async () => new Response(null, { status }),
+    );
+    assert.deepEqual(
+      await client.send({
+        credential: "re_test_secret",
+        idempotencyKey: `retry-${status}`,
+        from: "support@example.test",
+        to: "person@example.test",
+        subject: "Hello",
+        text: "Body",
+        replyTo: null,
+      }),
+      { kind: "retryable" },
+    );
+  }
+  const concurrent = new ResendSdkSendClient(async () =>
+    Response.json({ name: "concurrent_idempotent_requests" }, { status: 409 }),
+  );
+  assert.deepEqual(
+    await concurrent.send({
+      credential: "re_test_secret",
+      idempotencyKey: "retry-concurrent",
+      from: "support@example.test",
+      to: "person@example.test",
+      subject: "Hello",
+      text: "Body",
+      replyTo: null,
+    }),
+    { kind: "retryable" },
+  );
+  const mismatch = new ResendSdkSendClient(async () =>
+    Response.json({ name: "invalid_idempotent_request" }, { status: 409 }),
+  );
+  assert.deepEqual(
+    await mismatch.send({
+      credential: "re_test_secret",
+      idempotencyKey: "retry-mismatch",
+      from: "support@example.test",
+      to: "person@example.test",
+      subject: "Hello",
+      text: "Body",
+      replyTo: null,
+    }),
+    { kind: "failed" },
+  );
+});
