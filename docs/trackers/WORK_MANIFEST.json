@@ -65,9 +65,17 @@
     },
     {
       "id": "S2.domains-routing",
-      "status": "pending",
+      "status": "completed",
       "depends_on": ["S2.domain-address-persistence"],
-      "plan_reference": "Sprint 2 — domains, addresses, and routing policy"
+      "plan_reference": "Sprint 2 — provider-authoritative domain verification refresh",
+      "evidence": {
+        "tracker": "2026-10-31 — provider-authoritative domain verification refresh",
+        "tests": [
+          "apps/api/test/domain-verification-client.test.ts",
+          "apps/api/test/domain-verification-service.test.ts",
+          "apps/api/test/domain-verification-routes.test.ts"
+        ]
+      }
     },
     {
       "id": "S2.routing-foundation",

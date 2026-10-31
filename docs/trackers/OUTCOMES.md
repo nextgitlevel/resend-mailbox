@@ -10,6 +10,26 @@ intended outcome. Each entry must include:
   automated proof is insufficient.
 - Known limitations, follow-up work, and rollback notes.
 
+## 2026-10-31 — provider-authoritative domain verification refresh
+
+- **Decision:** ADR 0005 makes the provider, not the Owner client, the source
+  of domain verification state. The Owner may request a refresh only.
+- **Proof:** focused fixture, service, and route tests cover no-network
+  behavior, Owner authorization, scoped domain lookup, invalid verifier output,
+  and unconfigured production composition. The PostgreSQL integration test
+  proves foreign organization updates return no domain while a scoped update
+  persists `verified`; the database-backed API suite passed 42 tests.
+- **Authoritative application paths:** verification policy is
+  `apps/api/src/domains/domain-verification-service.ts`; fixture seam is
+  `apps/api/src/domains/domain-verification-client.ts`; scoped persistence is
+  `apps/api/src/persistence/identity-repository.ts`; HTTP handling is
+  `apps/api/src/app.ts`. These are source paths, not runtime configuration;
+  they have no mirrors and no live service reads them.
+- **Operational impact:** the authoritative development Compose definition is
+  `compose.dev.yaml`; its proof stack was removed. No runtime configuration,
+  secret, systemd unit, certificate, deployment artifact, or external provider
+  state changed.
+
 ## 2026-10-31 — organization-safe domain and allowed-recipient persistence hardening
 
 - **Intended outcome:** prevent cross-organization catch-all and

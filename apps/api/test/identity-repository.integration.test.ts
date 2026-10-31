@@ -330,10 +330,24 @@ integrationTest(
       }),
       /ALLOWED_ADDRESS_REQUIRES_VERIFIED_DOMAIN/,
     );
-    await pool.query({
-      text: "UPDATE domains SET verification_status = 'verified' WHERE id = $1",
-      values: [domain.id],
-    });
+    assert.equal(
+      await repository.updateDomainVerificationStatusForOrganization({
+        organizationId: second.organizationId,
+        domainId: domain.id,
+        verificationStatus: "verified",
+      }),
+      null,
+    );
+    assert.equal(
+      (
+        await repository.updateDomainVerificationStatusForOrganization({
+          organizationId: first.organizationId,
+          domainId: domain.id,
+          verificationStatus: "verified",
+        })
+      )?.verificationStatus,
+      "verified",
+    );
     await assert.rejects(
       repository.createAllowedAddress({
         organizationId: first.organizationId,

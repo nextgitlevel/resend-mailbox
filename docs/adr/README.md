@@ -15,3 +15,4 @@ acceptance; supersede them with a new ADR rather than rewriting history.
 - [0002 — Inbound message lifecycle](0002-inbound-message-lifecycle.md)
 - [0003 — Encrypted account settings](0003-encrypted-account-settings.md)
 - [0004 — Owner authentication and sessions](0004-owner-authentication-and-sessions.md)
+- [0005 — Domain verification authority](0005-domain-verification-authority.md)

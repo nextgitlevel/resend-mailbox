@@ -7,7 +7,10 @@ import type {
   Mailbox,
   RedactedDomain,
 } from "../domains/domain-settings-service.js";
-import type { DomainFallbackPolicy } from "../routing/recipient-router.js";
+import type {
+  DomainFallbackPolicy,
+  DomainVerificationStatus,
+} from "../routing/recipient-router.js";
 
 type Queryable = Pick<Pool, "query"> | Pick<PoolClient, "query">;
 
@@ -618,6 +621,40 @@ export class PostgresIdentityRepository implements DomainSettingsRepository {
       name: row.normalized_name,
       verificationStatus: row.verification_status,
       fallback,
+    };
+  }
+
+  public async updateDomainVerificationStatusForOrganization(input: {
+    organizationId: string;
+    domainId: string;
+    verificationStatus: DomainVerificationStatus;
+  }): Promise<RedactedDomain | null> {
+    const result = await this.pool.query<{
+      id: string;
+      organization_id: string;
+      connection_id: string;
+      normalized_name: string;
+      verification_status: "pending" | "verified" | "failed";
+      fallback_kind: "catch_all" | "quarantine" | "discard";
+      fallback_mailbox_id: string | null;
+    }>({
+      text: `UPDATE domains SET verification_status = $3
+             WHERE organization_id = $1 AND id = $2
+             RETURNING id, organization_id, connection_id, normalized_name, verification_status, fallback_kind, fallback_mailbox_id`,
+      values: [input.organizationId, input.domainId, input.verificationStatus],
+    });
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      connectionId: row.connection_id,
+      name: row.normalized_name,
+      verificationStatus: row.verification_status,
+      fallback:
+        row.fallback_kind === "catch_all"
+          ? { kind: "catch_all", mailboxId: row.fallback_mailbox_id as string }
+          : { kind: row.fallback_kind },
     };
   }
 

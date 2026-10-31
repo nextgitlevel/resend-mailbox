@@ -4,6 +4,7 @@ import Fastify from "fastify";
 
 import { AuthService } from "./auth/auth-service.js";
 import { DomainSettingsService } from "./domains/domain-settings-service.js";
+import { DomainVerificationService } from "./domains/domain-verification-service.js";
 import { WebhookReceiptService } from "./inbound/webhook-receipt-service.js";
 import { ConnectionSettingsService } from "./settings/connection-settings-service.js";
 import { ConnectionValidationService } from "./settings/connection-validation-service.js";
@@ -13,6 +14,7 @@ export interface AppOptions {
   connectionSettingsService?: ConnectionSettingsService;
   connectionValidationService?: ConnectionValidationService;
   domainSettingsService?: DomainSettingsService;
+  domainVerificationService?: DomainVerificationService;
   resendWebhookSecret?: string;
   webhookReceiptService?: WebhookReceiptService;
   secureCookies?: boolean;
@@ -375,6 +377,38 @@ export const buildApp = (options: AppOptions = {}) => {
       return reply
         .code(code === "OWNER_REQUIRED" ? 403 : 400)
         .send({ error: code });
+    }
+  });
+
+  app.post("/v1/domains/:domainId/verify", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    if (account.role !== "owner")
+      return reply.code(403).send({ error: "OWNER_REQUIRED" });
+    if (!options.domainVerificationService)
+      return reply
+        .code(503)
+        .send({ error: "DOMAIN_VERIFICATION_NOT_CONFIGURED" });
+    const { domainId } = request.params as { domainId?: string };
+    if (!domainId) return reply.code(400).send({ error: "INVALID_DOMAIN_ID" });
+    try {
+      return {
+        domain: await options.domainVerificationService.refreshDomain({
+          account,
+          domainId,
+        }),
+      };
+    } catch (error) {
+      const code = errorMessage(error);
+      return reply.code(code === "DOMAIN_NOT_FOUND" ? 404 : 400).send({
+        error:
+          code === "DOMAIN_NOT_FOUND" ? code : "DOMAIN_VERIFICATION_FAILED",
+      });
     }
   });
 

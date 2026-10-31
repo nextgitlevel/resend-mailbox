@@ -2,17 +2,16 @@
 
 ## Slice ID
 
-S2.domains-routing
+S2.address-sender-policy
 
 ## Next task
 
-Sprint 2 — domain verification transition and routing configuration
+Sprint 2 — allowed-address sender and reply-to policy
 
 ## Acceptance criteria
 
-- Pending task selection: translate the remaining Sprint 2 verification and
-  routing-policy plan requirements into a bounded slice without introducing a
-  live Resend provider dependency or accepting inbound mail.
+- Pending task selection: turn Sprint 2's default-sender and reply-to
+  requirements into a bounded, organization-scoped policy slice.
 
 ## Test-first evidence
 

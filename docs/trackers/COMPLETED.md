@@ -3,6 +3,36 @@
 Completed tasks move here from `ACTIVE.md` with the date, commit, acceptance
 criteria, verification commands, and concise result. Do not erase history.
 
+## 2026-10-31 — provider-authoritative domain verification refresh
+
+**Outcome:** introduced a safe, provider-independent verification refresh
+seam without permitting client-selected domain status or adding a live Resend
+call.
+
+**Acceptance criteria met:** Owner-only refresh derives organization from the
+session, scopes lookup and status update to that organization, conceals foreign
+or missing domains, and returns redacted domain data. Fixture verification is
+network-free and accepts only `pending`, `verified`, or `failed`; invalid
+output fails closed. Server composition intentionally returns
+`DOMAIN_VERIFICATION_NOT_CONFIGURED` until a separately reviewed live provider
+transport exists.
+
+**Test-first evidence:** `cd apps/api && node --import tsx --test
+test/domain-verification-service.test.ts` initially failed because the service
+module did not exist.
+
+**Verification:**
+
+```bash
+DATABASE_URL='postgresql://resend_mailbox_test:compose-probe-only@127.0.0.1:15432/resend_mailbox_test' corepack pnpm --filter @resend-mailbox/api test
+corepack pnpm verify
+git diff --check
+```
+
+**Result:** passed. The disposable Compose stack and volumes were removed.
+No runtime configuration, secret, live provider call, inbound-mail behavior,
+deployment artifact, or production service changed.
+
 ## 2026-10-31 — organization-safe domain and allowed-recipient persistence hardening
 
 **Outcome:** completed the active Sprint 2 persistence slice with durable
