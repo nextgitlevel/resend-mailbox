@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 
 import { AuthService } from "./auth/auth-service.js";
+import { DomainSettingsService } from "./domains/domain-settings-service.js";
 import { ConnectionSettingsService } from "./settings/connection-settings-service.js";
 import { ConnectionValidationService } from "./settings/connection-validation-service.js";
 
@@ -8,6 +9,7 @@ export interface AppOptions {
   authService?: AuthService;
   connectionSettingsService?: ConnectionSettingsService;
   connectionValidationService?: ConnectionValidationService;
+  domainSettingsService?: DomainSettingsService;
   secureCookies?: boolean;
 }
 
@@ -220,6 +222,70 @@ export const buildApp = (options: AppOptions = {}) => {
     }
   });
 
+  app.post("/v1/connections/:connectionId/domains", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.domainSettingsService)
+      return reply.code(503).send({ error: "DOMAINS_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const { connectionId } = request.params as { connectionId?: string };
+    const input = readDomainRequest(request.body);
+    if (!connectionId || !input)
+      return reply.code(400).send({ error: "INVALID_DOMAIN_INPUT" });
+    try {
+      return reply.code(201).send({
+        domain: await options.domainSettingsService.createDomain({
+          account,
+          connectionId,
+          ...input,
+        }),
+      });
+    } catch (error) {
+      const code = domainErrorCode(error);
+      return reply
+        .code(
+          code === "OWNER_REQUIRED"
+            ? 403
+            : code === "CONNECTION_NOT_FOUND"
+              ? 404
+              : 400,
+        )
+        .send({ error: code });
+    }
+  });
+
+  app.post("/v1/mailboxes", async (request, reply) => {
+    if (!options.authService)
+      return reply.code(503).send({ error: "AUTH_NOT_CONFIGURED" });
+    if (!options.domainSettingsService)
+      return reply.code(503).send({ error: "DOMAINS_NOT_CONFIGURED" });
+    const account = await authenticateRequest(
+      request.headers.cookie,
+      options.authService,
+    );
+    if (!account) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const body = request.body;
+    if (!isRecord(body) || typeof body.name !== "string")
+      return reply.code(400).send({ error: "INVALID_MAILBOX_INPUT" });
+    try {
+      return reply.code(201).send({
+        mailbox: await options.domainSettingsService.createMailbox({
+          account,
+          name: body.name,
+        }),
+      });
+    } catch (error) {
+      const code = domainErrorCode(error);
+      return reply
+        .code(code === "OWNER_REQUIRED" ? 403 : 400)
+        .send({ error: code });
+    }
+  });
+
   return app;
 };
 
@@ -263,6 +329,32 @@ const readConnectionRequest = (body: unknown) => {
   }
 
   return { name: body.name, apiKey: body.apiKey };
+};
+
+const readDomainRequest = (body: unknown) => {
+  if (
+    !isRecord(body) ||
+    typeof body.name !== "string" ||
+    !isRecord(body.fallback) ||
+    typeof body.fallback.kind !== "string"
+  )
+    return null;
+  if (
+    body.fallback.kind === "catch_all" &&
+    typeof body.fallback.mailboxId === "string"
+  )
+    return {
+      name: body.name,
+      fallback: {
+        kind: "catch_all" as const,
+        mailboxId: body.fallback.mailboxId,
+      },
+    };
+  if (body.fallback.kind === "quarantine")
+    return { name: body.name, fallback: { kind: "quarantine" as const } };
+  if (body.fallback.kind === "discard")
+    return { name: body.name, fallback: { kind: "discard" as const } };
+  return null;
 };
 
 const authenticateRequest = (
@@ -338,6 +430,18 @@ const validationErrorCode = (error: unknown) =>
   errorMessage(error) === "OWNER_REQUIRED"
     ? "OWNER_REQUIRED"
     : "CONNECTION_NOT_FOUND";
+
+const domainErrorCode = (error: unknown) => {
+  const message = errorMessage(error);
+  return [
+    "OWNER_REQUIRED",
+    "CONNECTION_NOT_FOUND",
+    "INVALID_DOMAIN_INPUT",
+    "INVALID_MAILBOX_INPUT",
+  ].includes(message)
+    ? message
+    : "DOMAIN_CONFIGURATION_FAILED";
+};
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "UNKNOWN_ERROR";
