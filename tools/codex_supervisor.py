@@ -49,32 +49,40 @@ class Supervisor:
    s=self.state(); slice_id=re.search(r"## Slice ID\s+([^\n]+)",active).group(1).strip()
    if s["attempts"].get(slice_id,0)>=max_attempts:return "STOP: retry limit reached; human review required."
    s["attempts"][slice_id]=s["attempts"].get(slice_id,0)+1;self.save(s);self.append_history({"event":"started","slice":slice_id,"at":self.now()})
-   prompt="Read AGENTS.md and all required docs. Work only on ACTIVE.md. Follow test-first gates. Never deploy, change production, create secrets, bypass validation, or invent requirements. Before the scoped commit/push, update WORK_MANIFEST.json to completed with evidence; add the exact ACTIVE Slice ID marker plus Outcome, Verification, and Result evidence to COMPLETED.md; and clear/advance ACTIVE.md. Stop for ambiguity or required authority.\n\n"+active
+   prompt="Read AGENTS.md and all required docs. Implement only ACTIVE.md. Follow test-first gates. Never deploy, change production, create secrets, bypass validation, or invent requirements. Update ACTIVE.md with acceptance criteria and test-first evidence, but do not finalize trackers, commit, or push: the supervisor owns lifecycle finalization. Stop for ambiguity or required authority.\n\n"+active
    try: result=self.call(["codex","exec","--sandbox","workspace-write","--json","--cd",str(self.root),prompt])
    except subprocess.TimeoutExpired:return self.stop(s,"Codex execution timed out")
    if result.returncode:return self.stop(s,"Codex execution failed")
+   updated=self.active()
+   if "Pending" in updated or updated==active:
+    return self.stop(s,"worker did not record completion-ready acceptance evidence")
    for name,c in GATES:
     try: gate=self.call(c)
     except subprocess.TimeoutExpired:return self.stop(s,f"quality gate timed out: {name}")
     if gate.returncode:return self.stop(s,f"quality gate failed: {name}")
-   marker=f"<!-- slice-id: {slice_id} -->"
-   completed=self.read("docs/trackers/COMPLETED.md"); evidence=completed.split(marker,1)[-1].split("<!-- slice-id:",1)[0]
-   if marker not in completed or not all(x in evidence for x in ("**Outcome:**","**Verification:**","**Result:**")):
-    return self.stop(s,"completed tracker lacks required slice evidence")
-   if "No active implementation task." not in self.active():
-    return self.stop(s,"active tracker was not advanced in the slice commit")
+   if self.call(["git","diff","--quiet"]).returncode==0:
+    return self.stop(s,"worker produced no change to validate")
+   self.finalize(slice_id,updated)
    try:
+    if self.call(["git","add","-A"]).returncode:return self.stop(s,"git staging failed")
+    if self.call(["git","commit","-m",f"feat: complete {slice_id}"]).returncode:return self.stop(s,"git commit failed")
+    if self.call(["git","push","origin","main"]).returncode:return self.stop(s,"git push failed")
     clean=self.call(["git","status","--porcelain"]);head=self.call(["git","rev-parse","HEAD"]);remote=self.call(["git","ls-remote","origin","HEAD"])
    except subprocess.TimeoutExpired:return self.stop(s,"commit/push verification timed out")
    if clean.returncode or clean.stdout.strip() or head.returncode or remote.returncode or not remote.stdout.startswith(head.stdout.strip()):
     return self.stop(s,"required commit and push verification failed")
-   manifest=json.loads(self.read("docs/trackers/WORK_MANIFEST.json")); item=next((x for x in manifest["items"] if x["id"]==slice_id),None)
-   if not item or item.get("status")!="completed" or not item.get("evidence"):
-    return self.stop(s,"manifest lacks required committed completion evidence")
    s["history"].append({"slice":slice_id,"completed_at":self.now()});s["stopped_reason"]=None;self.save(s);self.append_history({"event":"completed","slice":slice_id,"at":self.now()});return "SLICE COMPLETE: re-run selects next eligible slice."
   finally:
    if self.lock.exists() and self.lock.read_text()==getattr(self,"lock_token",None):self.lock.unlink()
  def stop(self,s,reason): s["stopped_reason"]=reason;self.save(s);self.append_history({"event":"stopped","reason":reason,"at":self.now()});return "STOP: "+reason+"; human review required."
+ def finalize(self,slice_id,active):
+  completed=self.root/"docs/trackers/COMPLETED.md"
+  completed.write_text(completed.read_text()+f"\n<!-- slice-id: {slice_id} -->\n\n**Outcome:** Worker completed the documented slice.\n\n**Verification:** `corepack pnpm verify` and `git diff --check` passed under supervisor control.\n\n**Result:** passed.\n")
+  manifest=json.loads(self.read("docs/trackers/WORK_MANIFEST.json"))
+  for item in manifest["items"]:
+   if item["id"]==slice_id:item.update({"status":"completed","evidence":{"supervisor":"worker evidence plus quality gates","completed_at":self.now()}})
+  (self.root/"docs/trackers/WORK_MANIFEST.json").write_text(json.dumps(manifest,indent=2)+"\n")
+  (self.root/"docs/trackers/ACTIVE.md").write_text("# Active work\n\nNo active implementation task. The supervisor must select the next eligible manifest slice before changing application code.\n")
  def cycle(self,activate=False,ack=None,max_attempts=2,max_slices=20):
   results=[]
   for _ in range(max_slices):
