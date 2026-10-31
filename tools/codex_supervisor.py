@@ -49,10 +49,16 @@ class Supervisor:
    s=self.state(); slice_id=re.search(r"## Slice ID\s+([^\n]+)",active).group(1).strip()
    if s["attempts"].get(slice_id,0)>=max_attempts:return "STOP: retry limit reached; human review required."
    s["attempts"][slice_id]=s["attempts"].get(slice_id,0)+1;self.save(s);self.append_history({"event":"started","slice":slice_id,"at":self.now()})
-   prompt="Read AGENTS.md and all required docs. Implement only ACTIVE.md. Follow test-first gates. Never deploy, change production, create secrets, bypass validation, or invent requirements. Update ACTIVE.md with acceptance criteria and test-first evidence, but do not finalize trackers, commit, or push: the supervisor owns lifecycle finalization. Stop for ambiguity or required authority.\n\n"+active
-   try: result=self.call(["codex","exec","--sandbox","workspace-write","--json","--cd",str(self.root),prompt])
+   result_path=self.dir/"worker-result.json"
+   prompt="Read AGENTS.md and all required docs. Implement only ACTIVE.md. Follow test-first gates. Never deploy, change production, create secrets, bypass validation, or invent requirements. Update ACTIVE.md with acceptance criteria and test-first evidence, but do not finalize trackers, commit, or push: the supervisor owns lifecycle finalization. Your final structured result must report completed or blocked, with evidence. Stop for ambiguity or required authority.\n\n"+active
+   try: result=self.call(["codex","exec","--sandbox","workspace-write","--output-schema",str(self.root/"tools/schemas/worker-result.json"),"--output-last-message",str(result_path),"--json","--cd",str(self.root),prompt])
    except subprocess.TimeoutExpired:return self.stop(s,"Codex execution timed out")
    if result.returncode:return self.stop(s,"Codex execution failed")
+   try: worker=json.loads(result_path.read_text())
+   except (OSError,json.JSONDecodeError):return self.stop(s,"worker produced no valid structured result")
+   if worker["status"]=="blocked":return self.stop(s,"worker reported blocker: "+worker.get("blocker",worker["outcome"]))
+   if not worker["acceptance_evidence"] or not worker["verification"]:
+    return self.stop(s,"worker result lacks completion evidence")
    updated=self.active()
    if "Pending" in updated or updated==active:
     return self.stop(s,"worker did not record completion-ready acceptance evidence")
@@ -62,7 +68,7 @@ class Supervisor:
     if gate.returncode:return self.stop(s,f"quality gate failed: {name}")
    if self.call(["git","diff","--quiet"]).returncode==0:
     return self.stop(s,"worker produced no change to validate")
-   self.finalize(slice_id,updated)
+   self.finalize(slice_id,updated,worker)
    try:
     if self.call(["git","add","-A"]).returncode:return self.stop(s,"git staging failed")
     if self.call(["git","commit","-m",f"feat: complete {slice_id}"]).returncode:return self.stop(s,"git commit failed")
@@ -75,9 +81,9 @@ class Supervisor:
   finally:
    if self.lock.exists() and self.lock.read_text()==getattr(self,"lock_token",None):self.lock.unlink()
  def stop(self,s,reason): s["stopped_reason"]=reason;self.save(s);self.append_history({"event":"stopped","reason":reason,"at":self.now()});return "STOP: "+reason+"; human review required."
- def finalize(self,slice_id,active):
+ def finalize(self,slice_id,active,worker):
   completed=self.root/"docs/trackers/COMPLETED.md"
-  completed.write_text(completed.read_text()+f"\n<!-- slice-id: {slice_id} -->\n\n**Outcome:** Worker completed the documented slice.\n\n**Verification:** `corepack pnpm verify` and `git diff --check` passed under supervisor control.\n\n**Result:** passed.\n")
+  completed.write_text(completed.read_text()+f"\n<!-- slice-id: {slice_id} -->\n\n**Outcome:** {worker['outcome']}\n\n**Verification:** {'; '.join(worker['verification'])}; supervisor gates passed.\n\n**Result:** passed.\n")
   manifest=json.loads(self.read("docs/trackers/WORK_MANIFEST.json"))
   for item in manifest["items"]:
    if item["id"]==slice_id:item.update({"status":"completed","evidence":{"supervisor":"worker evidence plus quality gates","completed_at":self.now()}})

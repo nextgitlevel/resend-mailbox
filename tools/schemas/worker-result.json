@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "outcome", "acceptance_evidence", "verification"],
+  "properties": {
+    "status": { "enum": ["completed", "blocked"] },
+    "outcome": { "type": "string", "minLength": 1 },
+    "acceptance_evidence": { "type": "array", "items": { "type": "string" } },
+    "verification": { "type": "array", "items": { "type": "string" } },
+    "blocker": { "type": "string" }
+  }
+}
