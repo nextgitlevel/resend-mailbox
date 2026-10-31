@@ -2,6 +2,7 @@ import { Pool } from "pg";
 
 import { AuthService } from "./auth/auth-service.js";
 import { buildApp } from "./app.js";
+import { DomainSettingsService } from "./domains/domain-settings-service.js";
 import { PostgresIdentityRepository } from "./persistence/identity-repository.js";
 import { ConnectionSettingsService } from "./settings/connection-settings-service.js";
 import { CredentialEncryptionService } from "./settings/credential-encryption.js";
@@ -31,6 +32,9 @@ const app = buildApp({
           new CredentialEncryptionService(keyManagement),
         )
       : undefined,
+  domainSettingsService: repository
+    ? new DomainSettingsService(repository)
+    : undefined,
   resendWebhookSecret: process.env.RESEND_WEBHOOK_SECRET,
 });
 const port = Number(process.env.PORT ?? 3001);
