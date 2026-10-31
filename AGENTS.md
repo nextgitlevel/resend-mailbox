@@ -1,4 +1,4 @@
-# Resend Mailbox — agent operating rules
+# Resend Mailbox — Codex/agent operating rules
 
 ## Product and deployment boundary
 
@@ -26,17 +26,16 @@ Update the trackers as part of every task. Do not begin a new implementation
 while `ACTIVE.md` has a different unresolved task unless the user explicitly
 replaces it.
 
-## Autonomous project advancement
+## Autonomous Development Rules
 
-Continue through approved plan work without waiting for per-slice approval.
-Use the documented architecture, ADRs, code contracts, and conservative,
-reversible defaults when details are unspecified. Complete dependent work in
-sequence and select the next independent approved work whenever a task is
-blocked. Record the specific blocker and preserve unfinished work; do not
-treat one blocked item as a reason to stop the project. Return control only
-for a genuinely new product decision, missing authority, or validation that
-cannot proceed safely. Established deployment, credential, and production
-boundaries are constraints to enforce, not recurring approval requests.
+1. Continue implementing the approved development plan without requesting routine approval.
+2. Automatically select and execute the next eligible task after completing each task.
+3. Make routine technical decisions independently using established architecture and conservative defaults.
+4. If blocked, document the issue and immediately continue with independent approved work.
+5. Escalate only decisions requiring authority not already granted.
+6. Never bypass security restrictions, required tests, or validation.
+7. Do not treat completing a task, commit, or implementation slice as completing the development assignment.
+8. Continue until all approved, actionable work is complete or execution is externally interrupted.
 
 ## Test-first implementation protocol
 
