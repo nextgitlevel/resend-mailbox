@@ -40,7 +40,8 @@ export function TabButton({
 }: TabTriggerSlotProps) {
   // Expo Router's web trigger passes a ref intended for its wrapper component;
   // React Native Web's Pressable expects a native-element ref instead.
-  const { ref: _routerRef, ...pressableProps } = props;
+  const { ref, ...pressableProps } = props;
+  void ref;
 
   return (
     <Pressable
